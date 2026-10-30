@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laundry POS — Customer Reviews</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="icon" href="assets/img/logo.jpeg" />
+  <style>
+    body { background: linear-gradient(135deg, #4f7cff, #6a5cff); margin: 0; min-height: 100vh; padding: 20px 12px; }
+    .rev-container { max-width: 720px; margin: 0 auto; }
+    .rev-header { text-align: center; color: #fff; padding: 8px 0 24px; }
+    .rev-header img { max-width: 130px; max-height: 90px; background: #000; padding: 10px; border-radius: 12px; }
+    .rev-header h1 { font-size: 28px; margin: 14px 0 6px; }
+    .rev-summary { background: #fff; border-radius: 20px; padding: 24px; text-align: center; margin-bottom: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+    .big-rating { font-size: 64px; font-weight: 900; color: #f59e0b; line-height: 1; }
+    .big-stars { font-size: 28px; color: #f59e0b; margin-top: 8px; }
+    .total-revs { color: #666; margin-top: 4px; font-size: 14px; }
+    .rev-card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    .rev-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .rev-name { font-weight: 800; }
+    .rev-stars { color: #f59e0b; font-size: 18px; }
+    .rev-date { font-size: 11px; color: #666; }
+    .rev-text { font-size: 14px; line-height: 1.5; color: #333; margin-top: 6px; }
+    .empty-state { background: #fff; border-radius: 20px; padding: 60px 20px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="rev-container">
+    <div class="rev-header">
+      <img src="assets/img/logo.jpeg" alt="logo" onerror="this.style.display='none'"/>
+      <h1 id="shopName">Laundry POS</h1>
+      <p style="opacity:.9;">⭐ What our customers say</p>
+    </div>
+
+    <div id="content"></div>
+
+    <div style="text-align:center;color:#fff;margin-top:20px;font-size:13px;opacity:.9;">
+      <a href="portal.html" style="color:#fff;text-decoration:underline;">📦 Track Order</a> 
+    </div>
+  </div>
+
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/cloudsync.js"></script>
+  <script>
+    const s = DB.settings();
+    document.getElementById('shopName').textContent = s.shopName || 'Laundry POS';
+    document.title = s.shopName + ' — Reviews';
+
+    const minStars = s.minReviewStars || 4;
+    const reviews = DB.all('reviews')
+      .filter(r => (r.rating || 0) >= minStars && r.comment)
+      .sort((a,b) => (b.reviewedAt||'').localeCompare(a.reviewedAt||''));
+
+    const allReviews = DB.all('reviews');
+    const avgRating = allReviews.length ? (allReviews.reduce((s,r) => s + (r.rating||0), 0) / allReviews.length).toFixed(1) : '0';
+    const stars = (n) => '★'.repeat(Math.round(n)) + '☆'.repeat(5 - Math.round(n));
+
+    let html = `
+      <div class="rev-summary">
+        <div class="big-rating">${avgRating}</div>
+        <div class="big-stars">${stars(+avgRating)}</div>
+        <div class="total-revs">${allReviews.length} total reviews • showing ${reviews.length} verified</div>
+      </div>
+    `;
+
+    if (!reviews.length) {
+      html += '<div class="empty-state"><div style="font-size:60px;opacity:.4;">⭐</div><h3>No reviews yet</h3><p style="color:#666;">Be the first to share your experience!</p></div>';
+    } else {
+      reviews.forEach(r => {
+        const c = DB.get('customers', r.customerId) || {};
+        const name = c.name ? c.name.split(' ').map((p,i) => i === 0 ? p : p[0]+'.').join(' ') : 'Customer';
+        html += `<div class="rev-card">
+          <div class="rev-head">
+            <div>
+              <div class="rev-name">${escapeHtml(name)}</div>
+              <div class="rev-stars">${stars(r.rating)}</div>
+            </div>
+            <div class="rev-date">${fmtDateShort(r.reviewedAt)}</div>
+          </div>
+          <div class="rev-text">${escapeHtml(r.comment)}</div>
+        </div>`;
+      });
+    }
+
+    document.getElementById('content').innerHTML = html;
+  </script>
+</body>
+</html>

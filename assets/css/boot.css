@@ -1,0 +1,326 @@
+/* ============================================================
+   BRAND BOOT SCREEN  (shown while the workspace loads)
+   Identity comes from Settings → Shop Information.
+   ============================================================ */
+
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 720px at 50% 38%, #12475c 0%, #0d3348 42%, #0a2333 72%, #071a27 100%);
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+.boot-screen.is-on  { opacity: 1; }
+.boot-screen.is-off { opacity: 0; }
+body.boot-active { overflow: hidden; }
+
+/* soft teal aura behind the logo */
+.boot-aura {
+  position: absolute;
+  left: 50%; top: 46%;
+  width: 620px; height: 620px;
+  margin: -310px 0 0 -310px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20,190,197,0.34) 0%, rgba(20,190,197,0.12) 42%, rgba(20,190,197,0) 70%);
+  filter: blur(6px);
+  animation: bootAura 3.2s ease-in-out infinite;
+}
+
+/* faint circuit grid */
+.boot-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(120,215,220,0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120,215,220,0.055) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(circle at 50% 46%, #000 0%, transparent 68%);
+          mask-image: radial-gradient(circle at 50% 46%, #000 0%, transparent 68%);
+  animation: bootGrid 22s linear infinite;
+}
+
+.boot-core {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 24px;
+  transition: transform 0.42s ease;
+}
+.boot-screen.is-off .boot-core { transform: scale(1.045); }
+
+/* ---------- logo + rotating ring ---------- */
+.boot-logo-wrap {
+  position: relative;
+  width: 138px; height: 138px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+.boot-ring {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+.boot-ring-track {
+  fill: none;
+  stroke: rgba(140,225,230,0.16);
+  stroke-width: 2.4;
+}
+.boot-ring-spin {
+  fill: none;
+  stroke: #1fc3c9;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 92 253;
+  filter: drop-shadow(0 0 7px rgba(31,195,201,0.85));
+  transform-origin: 50% 50%;
+  animation: bootSpin 1.35s linear infinite;
+}
+
+.boot-logo {
+  position: relative;
+  width: 96px; height: 96px;
+  border-radius: 26px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0d8a90;
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.42),
+    0 0 0 1px rgba(255,255,255,0.10),
+    inset 0 -3px 10px rgba(13,138,144,0.10);
+  animation: bootPop 0.72s cubic-bezier(.22,1.15,.36,1) both;
+}
+.boot-logo svg { width: 56px; height: 56px; }
+.boot-logo-img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  border-radius: 26px;
+  padding: 9px;
+}
+
+/* ---------- wordmark ---------- */
+.boot-name {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: #ffffff;
+  animation: bootRise 0.7s 0.14s cubic-bezier(.22,1,.36,1) both;
+}
+.boot-wm-base   { color: #ffffff; }
+.boot-wm-accent { color: #35d6db; }
+
+.boot-tagline {
+  margin-top: 11px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: rgba(190,222,232,0.62);
+  animation: bootRise 0.7s 0.24s cubic-bezier(.22,1,.36,1) both;
+}
+
+/* ---------- status + dots ---------- */
+.boot-status {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 34px;
+  font-size: 12.5px;
+  color: rgba(190,222,232,0.78);
+  letter-spacing: 0.02em;
+  animation: bootRise 0.7s 0.34s cubic-bezier(.22,1,.36,1) both;
+}
+.boot-dots { display: inline-flex; gap: 5px; }
+.boot-dots i {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #1fc3c9;
+  display: block;
+  animation: bootDot 1.15s ease-in-out infinite;
+}
+.boot-dots i:nth-child(2) { animation-delay: 0.16s; }
+.boot-dots i:nth-child(3) { animation-delay: 0.32s; }
+
+/* ---------- indeterminate progress ---------- */
+.boot-bar {
+  margin-top: 18px;
+  width: 208px; height: 3px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.10);
+  overflow: hidden;
+  animation: bootRise 0.7s 0.42s cubic-bezier(.22,1,.36,1) both;
+}
+.boot-bar i {
+  display: block;
+  width: 42%; height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(31,195,201,0), #1fc3c9 40%, #6ee7eb 60%, rgba(31,195,201,0));
+  animation: bootBar 1.5s cubic-bezier(.55,.15,.45,.85) infinite;
+}
+
+/* ---------- footer ---------- */
+.boot-foot {
+  position: absolute;
+  bottom: 34px; left: 0; right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 11.5px;
+  color: rgba(180,212,224,0.55);
+  animation: bootRise 0.7s 0.5s cubic-bezier(.22,1,.36,1) both;
+}
+.boot-badge {
+  width: 20px; height: 20px;
+  border-radius: 5px;
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.boot-foot b { color: rgba(226,241,246,0.88); font-weight: 700; }
+
+/* ---------- keyframes ---------- */
+@keyframes bootSpin { to { transform: rotate(270deg); } }
+@keyframes bootPop {
+  0%   { opacity: 0; transform: scale(0.62) rotate(-7deg); }
+  60%  { opacity: 1; transform: scale(1.06) rotate(1.4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes bootRise {
+  from { opacity: 0; transform: translateY(11px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bootDot {
+  0%, 100% { opacity: 0.28; transform: translateY(0) scale(0.86); }
+  45%      { opacity: 1;    transform: translateY(-4px) scale(1); }
+}
+@keyframes bootBar {
+  0%   { transform: translateX(-115%); }
+  100% { transform: translateX(255%); }
+}
+@keyframes bootAura {
+  0%, 100% { opacity: 0.55; transform: scale(0.94); }
+  50%      { opacity: 1;    transform: scale(1.06); }
+}
+@keyframes bootGrid { to { background-position: 46px 46px, 46px 46px; } }
+
+/* ---------- small screens ---------- */
+@media (max-width: 520px) {
+  .boot-logo-wrap { width: 118px; height: 118px; margin-bottom: 24px; }
+  .boot-logo { width: 82px; height: 82px; border-radius: 22px; }
+  .boot-logo svg { width: 47px; height: 47px; }
+  .boot-logo-img { border-radius: 22px; padding: 8px; }
+  .boot-name { font-size: 21px; }
+  .boot-tagline { font-size: 9.5px; letter-spacing: 0.16em; }
+  .boot-bar { width: 170px; }
+  .boot-status { font-size: 11.5px; }
+}
+
+/* ---------- respect reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .boot-screen,
+  .boot-screen * { animation: none !important; transition: none !important; }
+  .boot-screen { opacity: 1; }
+  .boot-bar i { width: 55%; }
+}
+
+/* ============================================================
+   COMPACT BRAND LOADER  (in-app page transitions)
+   Floating pill — only shown when a load is genuinely slow.
+   ============================================================ */
+
+.bq-loader {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 99980;
+  background: linear-gradient(135deg, #10394f 0%, #0a2333 100%);
+  color: #eaf7f9;
+  border-radius: 999px;
+  padding: 7px 16px 7px 8px;
+  box-shadow:
+    0 14px 34px rgba(7,26,39,0.34),
+    0 0 0 1px rgba(120,215,220,0.16),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  transform: translate(-50%, -150%);
+  transition: transform 0.36s cubic-bezier(.22,1,.36,1), opacity 0.24s ease;
+  opacity: 0;
+  pointer-events: none;
+  max-width: min(92vw, 460px);
+}
+.bq-loader.is-on  { transform: translate(-50%, 0); opacity: 1; }
+.bq-loader.is-off { transform: translate(-50%, -150%); opacity: 0; }
+
+.bq-inner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.bq-mark {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: #fff;
+  color: #0d8a90;
+  display: flex; align-items: center; justify-content: center;
+  flex: 0 0 30px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.30);
+}
+.bq-mark svg { width: 18px; height: 18px; }
+.bq-logo-img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; padding: 3px; }
+
+.bq-text { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.bq-name {
+  font-size: 12.5px; font-weight: 800; letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.bq-wm-b { color: #fff; }
+.bq-wm-a { color: #35d6db; }
+.bq-status {
+  font-size: 11.5px; color: rgba(190,222,232,0.74);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.bq-spin {
+  width: 15px; height: 15px;
+  flex: 0 0 15px;
+  margin-left: 2px;
+  border-radius: 50%;
+  border: 2px solid rgba(53,214,219,0.22);
+  border-top-color: #35d6db;
+  animation: bqSpin 0.8s linear infinite;
+}
+.bq-spin i { display: none; }
+
+/* the progress line is not needed on the pill layout */
+.bq-bar { display: none; }
+
+@keyframes bqSpin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+  .bq-loader { top: 10px; padding: 6px 13px 6px 7px; }
+  .bq-mark { width: 26px; height: 26px; flex-basis: 26px; }
+  .bq-name { font-size: 11.5px; }
+  .bq-status { font-size: 10.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bq-loader, .bq-loader * { animation: none !important; transition: opacity 0.2s ease !important; }
+  .bq-loader { transform: translate(-50%, 0); }
+  .bq-loader.is-off { transform: translate(-50%, 0); }
+}

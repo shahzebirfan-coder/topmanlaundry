@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laundry POS — Order Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/responsive.css" />
+  <link rel="icon" href="assets/img/logo.jpeg" />
+  <meta name="theme-color" content="#4f7cff"/>
+  <style>
+    /* ============================================================
+       MR LAUNDRY — PREMIUM CUSTOMER PORTAL
+       Modern, animated, colorful, mobile-first design
+       ============================================================ */
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #1a2238;
+      overflow-x: hidden;
+    }
+
+    /* Urdu language styling */
+    html[lang="ur"], body.lang-urdu {
+      font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif;
+    }
+    html[lang="ur"] h1, html[lang="ur"] h2, html[lang="ur"] h3 {
+      font-family: 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', serif;
+      line-height: 1.8;
+    }
+    html[dir="rtl"] .portal-tab { flex-direction: row-reverse; }
+    html[dir="rtl"] .portal-topbar { flex-direction: row-reverse; }
+    html[dir="rtl"] .info-card { text-align: right; }
+    html[dir="rtl"] .timeline { flex-direction: row-reverse; }
+    html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea { text-align: right; font-family: inherit; }
+    html[dir="rtl"] input[type="tel"], html[dir="rtl"] input[type="number"] { direction: ltr; text-align: left; }
+    html[dir="rtl"] .items-section td:nth-child(2) { text-align: right; }
+    html[dir="rtl"] .items-section td:last-child { text-align: left; direction: ltr; }
+    .money, [data-numeric] { direction: ltr; display: inline-block; }
+
+    /* ============== ANIMATED GRADIENT BACKGROUND ============== */
+    .portal-wrap {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+      background-size: 400% 400%;
+      animation: gradientShift 18s ease infinite;
+      padding: 16px 12px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* Floating bubbles in background */
+    .portal-wrap::before, .portal-wrap::after {
+      content: ''; position: absolute; border-radius: 50%;
+      background: rgba(255,255,255,0.08); pointer-events: none;
+    }
+    .portal-wrap::before {
+      width: 300px; height: 300px;
+      top: -100px; left: -100px;
+      animation: floatBubble 20s ease-in-out infinite;
+    }
+    .portal-wrap::after {
+      width: 200px; height: 200px;
+      bottom: 100px; right: -50px;
+      animation: floatBubble 15s ease-in-out infinite reverse;
+    }
+    @keyframes floatBubble {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%      { transform: translate(40px, 40px) scale(1.15); }
+      66%      { transform: translate(-30px, 60px) scale(0.9); }
+    }
+
+    /* Floating soap bubble decorations */
+    .bubble {
+      position: absolute; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.85), rgba(255,255,255,0.1));
+      box-shadow: 0 0 18px rgba(255,255,255,0.3), inset 0 0 12px rgba(255,255,255,0.4);
+      animation: floatUp 12s linear infinite;
+      opacity: 0;
+    }
+    @keyframes floatUp {
+      0%   { transform: translateY(110vh) scale(0); opacity: 0; }
+      10%  { opacity: 0.8; }
+      90%  { opacity: 0.6; }
+      100% { transform: translateY(-100px) scale(1.2); opacity: 0; }
+    }
+
+    .portal-container {
+      max-width: 760px; margin: 0 auto;
+      position: relative; z-index: 10;
+    }
+
+    /* ============== TOPBAR ============== */
+    .portal-topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; margin-bottom: 14px;
+      animation: slideDown .6s cubic-bezier(.4,0,.2,1);
+    }
+    .lang-btn, .shop-info-btn {
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: none; padding: 10px 16px; border-radius: 30px;
+      font-weight: 700; cursor: pointer; font-size: 13px;
+      color: #4f7cff;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+      transition: all .25s cubic-bezier(.4,0,.2,1);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .lang-btn:hover, .shop-info-btn:hover {
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    }
+    .lang-btn:active, .shop-info-btn:active { transform: scale(0.96); }
+
+    /* ============== HEADER ============== */
+    .portal-header {
+      text-align: center; color: #fff;
+      padding: 26px 0 30px;
+      animation: fadeInUp .8s cubic-bezier(.4,0,.2,1);
+    }
+    .portal-header img {
+      max-width: 130px; max-height: 110px;
+      background: #000; padding: 12px; border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4),
+                  0 0 0 4px rgba(255,255,255,0.2),
+                  0 0 40px rgba(255,255,255,0.15);
+      animation: logoBounce 1s cubic-bezier(.68,-.55,.27,1.55);
+      transition: transform .3s ease;
+    }
+    .portal-header img:hover {
+      transform: scale(1.05) rotate(-3deg);
+    }
+    @keyframes logoBounce {
+      0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+      60%  { transform: scale(1.15) rotate(15deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    .portal-header h1 {
+      font-size: 32px; margin: 18px 0 8px;
+      font-weight: 900; letter-spacing: -0.5px;
+      text-shadow: 0 4px 18px rgba(0,0,0,0.3);
+      background: linear-gradient(180deg, #fff 0%, #fef3c7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .portal-header p {
+      font-size: 15px; opacity: 0.95;
+      font-weight: 500; line-height: 1.5;
+    }
+    .open-badge {
+      display: inline-block; margin-top: 12px;
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 12px; font-weight: 800;
+      animation: pulse-badge 2s ease infinite;
+    }
+    .open-badge.open {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff; box-shadow: 0 4px 14px rgba(34,197,94,0.4);
+    }
+    .open-badge.closed {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: #fff; box-shadow: 0 4px 14px rgba(239,68,68,0.4);
+    }
+    @keyframes pulse-badge {
+      0%,100% { transform: scale(1); }
+      50%     { transform: scale(1.06); }
+    }
+
+    /* ============== GLASSMORPHIC CARDS ============== */
+    .portal-card {
+      background: rgba(255,255,255,0.97);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-radius: 24px; padding: 26px;
+      box-shadow: 0 25px 70px rgba(0,0,0,0.18),
+                  0 0 0 1px rgba(255,255,255,0.5) inset;
+      margin-bottom: 16px;
+      animation: cardSlideUp .7s cubic-bezier(.4,0,.2,1) both;
+      transition: transform .3s ease, box-shadow .3s ease;
+    }
+    .portal-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 30px 80px rgba(0,0,0,0.22),
+                  0 0 0 1px rgba(255,255,255,0.5) inset;
+    }
+    @keyframes cardSlideUp {
+      from { opacity: 0; transform: translateY(40px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Stagger card animations */
+    .portal-card:nth-child(1) { animation-delay: 0.1s; }
+    .portal-card:nth-child(2) { animation-delay: 0.2s; }
+    .portal-card:nth-child(3) { animation-delay: 0.3s; }
+    .portal-card:nth-child(4) { animation-delay: 0.4s; }
+
+    /* ============== QUICK ACTION BUTTONS ============== */
+    .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .quick-action {
+      padding: 18px 14px; text-align: center; border-radius: 16px;
+      font-weight: 800; font-size: 14px; cursor: pointer;
+      text-decoration: none; border: none;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      transition: all .25s cubic-bezier(.4,0,.2,1);
+      position: relative; overflow: hidden;
+    }
+    .quick-action::before {
+      content: ''; position: absolute; inset: 0;
+      background: rgba(255,255,255,0.3); transform: translateX(-100%);
+      transition: transform .5s ease;
+    }
+    .quick-action:hover::before { transform: translateX(0); }
+    .quick-action:hover { transform: translateY(-4px) scale(1.02); }
+    .quick-action:active { transform: scale(0.96); }
+    .quick-action .qa-icon {
+      font-size: 32px;
+      animation: iconWiggle 3s ease infinite;
+    }
+    @keyframes iconWiggle {
+      0%, 90%, 100% { transform: rotate(0deg); }
+      93% { transform: rotate(-8deg); }
+      96% { transform: rotate(8deg); }
+    }
+    .qa-reviews {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(245,158,11,0.4);
+    }
+    .qa-pickup {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(16,185,129,0.4);
+    }
+
+    /* ============== SEARCH TABS ============== */
+    .portal-tab {
+      display: flex; gap: 8px; margin-bottom: 18px;
+      background: #f1f5f9; padding: 6px; border-radius: 14px;
+    }
+    .portal-tab button {
+      flex: 1; padding: 12px;
+      border: none; background: transparent;
+      border-radius: 10px; font-weight: 700; cursor: pointer;
+      font-size: 14px; transition: all .25s ease;
+      color: #64748b;
+    }
+    .portal-tab button.active {
+      background: #fff; color: #4f7cff;
+      box-shadow: 0 4px 12px rgba(79,124,255,0.15);
+      transform: scale(1.02);
+    }
+
+    .big-input {
+      width: 100%; padding: 18px 20px; font-size: 17px;
+      border: 2px solid #e5e9f2; border-radius: 14px;
+      margin-bottom: 12px; font-weight: 600;
+      transition: all .25s ease; background: #f8fafc;
+    }
+    .big-input:focus {
+      outline: none; border-color: #4f7cff; background: #fff;
+      box-shadow: 0 0 0 5px rgba(79,124,255,0.15);
+      transform: translateY(-1px);
+    }
+    .big-btn {
+      width: 100%; padding: 18px;
+      background: linear-gradient(135deg, #4f7cff 0%, #6a5cff 50%, #8b5cf6 100%);
+      background-size: 200% auto;
+      color: #fff; border: none; border-radius: 14px;
+      font-size: 16px; font-weight: 800; cursor: pointer;
+      box-shadow: 0 10px 28px rgba(79,124,255,0.45);
+      transition: all .3s cubic-bezier(.4,0,.2,1);
+      position: relative; overflow: hidden;
+    }
+    .big-btn:hover {
+      background-position: right center;
+      transform: translateY(-2px);
+      box-shadow: 0 14px 36px rgba(79,124,255,0.55);
+    }
+    .big-btn:active { transform: scale(0.97); }
+    .big-btn::after {
+      content: ''; position: absolute; top: 50%; left: 50%;
+      width: 0; height: 0; border-radius: 50%;
+      background: rgba(255,255,255,0.5);
+      transform: translate(-50%, -50%);
+      transition: width .5s, height .5s;
+    }
+    .big-btn:active::after { width: 300px; height: 300px; }
+
+    /* ============== ORDER TRACKER CARD ============== */
+    .tracker {
+      background: linear-gradient(135deg, #f8faff 0%, #eff6ff 100%);
+      border-radius: 20px; padding: 22px;
+      margin: 18px 0; border: 1px solid #e0e7ff;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+      animation: trackerSlide .6s cubic-bezier(.4,0,.2,1) both;
+      transition: transform .3s ease, box-shadow .3s ease;
+    }
+    .tracker:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 18px 50px rgba(0,0,0,0.12);
+    }
+    @keyframes trackerSlide {
+      from { opacity: 0; transform: translateX(-30px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .tracker-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+    }
+    .tracker-inv {
+      font-weight: 900; font-size: 20px; color: #1a2238;
+      background: linear-gradient(135deg, #4f7cff, #6a5cff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tracker-date { font-size: 12px; color: #64748b; font-weight: 600; }
+
+    /* Timeline */
+    .timeline {
+      display: flex; align-items: center; gap: 6px;
+      margin: 26px 0 14px; flex-wrap: wrap;
+    }
+    .step {
+      flex: 1; min-width: 80px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 8px; position: relative;
+    }
+    .step .dot {
+      width: 50px; height: 50px;
+      border-radius: 50%; display: flex;
+      align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 700;
+      background: #e5e9f2; color: #94a3b8;
+      border: 3px solid #e5e9f2;
+      z-index: 2; transition: all .35s cubic-bezier(.68,-.55,.27,1.55);
+    }
+    .step .label {
+      font-size: 11px; text-align: center;
+      color: #94a3b8; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .step.done .dot {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff; border-color: #22c55e;
+      box-shadow: 0 6px 18px rgba(34,197,94,0.4);
+      animation: stepPop .5s cubic-bezier(.68,-.55,.27,1.55) both;
+    }
+    @keyframes stepPop {
+      0%   { transform: scale(0.5); opacity: 0; }
+      60%  { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .step.done .label { color: #16a34a; }
+    .step.current .dot {
+      background: linear-gradient(135deg, #4f7cff, #6a5cff);
+      color: #fff; border-color: #4f7cff;
+      box-shadow: 0 0 0 6px rgba(79,124,255,0.2), 0 8px 24px rgba(79,124,255,0.5);
+      animation: pulseCurrent 1.6s ease infinite;
+    }
+    .step.current .label { color: #4f7cff; font-weight: 900; }
+    .step.cancelled .dot {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: #fff; border-color: #ef4444;
+    }
+    .step.cancelled .label { color: #ef4444; }
+    @keyframes pulseCurrent {
+      0%,100% {
+        box-shadow: 0 0 0 6px rgba(79,124,255,0.2), 0 8px 24px rgba(79,124,255,0.5);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 0 16px rgba(79,124,255,0.05), 0 8px 24px rgba(79,124,255,0.5);
+        transform: scale(1.08);
+      }
+    }
+    .connector {
+      flex: 0 0 auto; height: 4px; min-width: 20px; flex: 1;
+      background: #e5e9f2; margin-top: -30px; margin-bottom: 30px;
+      border-radius: 4px; overflow: hidden;
+      position: relative;
+    }
+    .connector.done {
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+      animation: connectorFill .6s ease both;
+    }
+    @keyframes connectorFill {
+      from { transform: scaleX(0); transform-origin: left; }
+      to   { transform: scaleX(1); }
+    }
+
+    .tracker-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 10px; margin-top: 16px;
+    }
+    .info-card {
+      background: #fff; padding: 14px 10px;
+      border-radius: 14px; text-align: center;
+      border: 1px solid #e0e7ff;
+      transition: all .25s ease;
+    }
+    .info-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    }
+    .info-card .lbl { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.3px; }
+    .info-card .val { font-weight: 900; font-size: 17px; margin-top: 6px; color: #1a2238; }
+    .info-card.danger { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-color: #fca5a5; }
+    .info-card.danger .val { color: #dc2626; }
+    .info-card.success { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-color: #86efac; }
+    .info-card.success .val { color: #16a34a; }
+    .info-card.primary { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-color: #93c5fd; }
+    .info-card.primary .val { color: #4f7cff; }
+
+    /* ============== READY BANNER (celebration!) ============== */
+    .ready-banner {
+      background: linear-gradient(135deg, #22c55e, #16a34a, #15803d);
+      background-size: 200% auto;
+      animation: shimmer 3s linear infinite, bounce 2s ease infinite;
+      color: #fff; padding: 18px; border-radius: 14px;
+      margin: 14px 0; text-align: center; font-weight: 800;
+      font-size: 16px;
+      box-shadow: 0 12px 30px rgba(34,197,94,0.4);
+      position: relative; overflow: hidden;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 0% center; }
+      100% { background-position: 200% center; }
+    }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0); }
+      50%     { transform: translateY(-6px); }
+    }
+    .ready-banner::before {
+      content: '🎉'; position: absolute; left: 12px; top: 50%;
+      transform: translateY(-50%); font-size: 28px;
+      animation: tada 1.5s ease infinite;
+    }
+    .ready-banner::after {
+      content: '🎊'; position: absolute; right: 12px; top: 50%;
+      transform: translateY(-50%); font-size: 28px;
+      animation: tada 1.5s ease infinite .3s;
+    }
+    @keyframes tada {
+      0%, 100% { transform: translateY(-50%) rotate(0deg) scale(1); }
+      25%      { transform: translateY(-50%) rotate(-10deg) scale(1.15); }
+      75%      { transform: translateY(-50%) rotate(10deg) scale(1.15); }
+    }
+
+    .pay-due-banner {
+      background: linear-gradient(135deg, #fef3c7, #fed7aa);
+      border: 2px solid #f59e0b;
+      color: #92400e; padding: 14px; border-radius: 12px;
+      margin: 10px 0; font-weight: 700; font-size: 14px;
+      box-shadow: 0 6px 18px rgba(245,158,11,0.2);
+      animation: gentleShake 4s ease infinite;
+    }
+    @keyframes gentleShake {
+      0%, 100% { transform: translateX(0); }
+      96%      { transform: translateX(-2px); }
+      98%      { transform: translateX(2px); }
+    }
+
+    /* ============== ITEMS SECTION ============== */
+    .items-section {
+      margin-top: 16px; background: #fff;
+      padding: 14px; border-radius: 14px; border: 1px solid #e0e7ff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    }
+    .items-section summary {
+      cursor: pointer; font-weight: 700; color: #4f7cff;
+      padding: 6px; font-size: 14px;
+      list-style: none; position: relative;
+      padding-left: 24px;
+      transition: color .2s ease;
+    }
+    .items-section summary::-webkit-details-marker { display: none; }
+    .items-section summary::before {
+      content: '▶'; position: absolute; left: 6px; top: 50%;
+      transform: translateY(-50%); font-size: 10px;
+      transition: transform .3s ease;
+    }
+    .items-section[open] summary::before { transform: translateY(-50%) rotate(90deg); }
+    .items-section summary:hover { color: #6a5cff; }
+    .items-section table {
+      width: 100%; font-size: 13px; margin-top: 10px;
+      border-collapse: collapse;
+      animation: fadeIn .4s ease;
+    }
+    .items-section td {
+      padding: 8px 4px; border-bottom: 1px dashed #e5e9f2;
+      vertical-align: middle;
+    }
+    .items-section td:nth-child(2) { text-align: left; }
+    .items-section td:nth-child(3) { text-align: center; }
+    .items-section td:last-child { text-align: right; font-weight: 700; }
+
+    /* ============== SUMMARY CARDS ============== */
+    .summary-cards {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px; margin-bottom: 16px;
+    }
+    .summary-cards .card-num {
+      background: #fff; padding: 16px;
+      border-radius: 14px; text-align: center;
+      border: 2px solid #e5e9f2;
+      transition: all .3s cubic-bezier(.4,0,.2,1);
+      animation: cardPop .5s cubic-bezier(.68,-.55,.27,1.55) both;
+    }
+    .summary-cards .card-num:hover {
+      transform: translateY(-4px) scale(1.03);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.12);
+      border-color: #4f7cff;
+    }
+    .summary-cards .card-num:nth-child(1) { animation-delay: 0.1s; }
+    .summary-cards .card-num:nth-child(2) { animation-delay: 0.2s; }
+    .summary-cards .card-num:nth-child(3) { animation-delay: 0.3s; }
+    .summary-cards .card-num:nth-child(4) { animation-delay: 0.4s; }
+    @keyframes cardPop {
+      from { opacity: 0; transform: scale(0.6); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .summary-cards .card-num.highlight {
+      border-color: #22c55e;
+      background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+      animation: cardPop .5s cubic-bezier(.68,-.55,.27,1.55) both, glow 2s ease infinite;
+    }
+    @keyframes glow {
+      0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.3); }
+      50%     { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+    }
+    .summary-cards .card-num .l { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.3px; }
+    .summary-cards .card-num .v { font-size: 26px; font-weight: 900; margin-top: 6px; color: #1a2238; }
+    .summary-cards .card-num.highlight .v { color: #16a34a; }
+
+    .welcome {
+      font-size: 22px; font-weight: 900;
+      margin-bottom: 18px; color: #1a2238;
+      animation: slideInLeft .6s cubic-bezier(.4,0,.2,1);
+    }
+    .welcome::after {
+      content: ''; display: block; width: 50px; height: 4px;
+      background: linear-gradient(90deg, #4f7cff, #6a5cff);
+      border-radius: 2px; margin-top: 8px;
+    }
+    .order-empty {
+      text-align: center; padding: 50px 20px;
+    }
+    .order-empty .emo {
+      font-size: 80px; opacity: 0.5;
+      animation: bounce 2.5s ease infinite;
+    }
+
+    /* ============== FOOTER ============== */
+    .footer-help {
+      text-align: center; padding: 24px;
+      color: rgba(255,255,255,0.95);
+      font-size: 13px; font-weight: 500;
+    }
+    .footer-help a {
+      color: #fff; text-decoration: none; font-weight: 700;
+      padding: 6px 14px; border-radius: 20px;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(10px);
+      display: inline-block; margin-top: 8px;
+      transition: all .25s ease;
+    }
+    .footer-help a:hover {
+      background: rgba(255,255,255,0.3); transform: scale(1.05);
+    }
+
+    .contact-shop {
+      background: rgba(255,255,255,0.97);
+      backdrop-filter: blur(20px);
+      margin: 14px 0; padding: 18px;
+      border-radius: 18px; text-align: center;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+    }
+    .contact-shop a {
+      display: inline-block; margin: 4px 6px;
+      padding: 10px 18px; color: #fff;
+      border-radius: 24px; text-decoration: none;
+      font-weight: 700; font-size: 14px;
+      box-shadow: 0 6px 16px rgba(34,197,94,0.3);
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      transition: all .25s ease;
+    }
+    .contact-shop a:hover { transform: translateY(-2px) scale(1.05); }
+    .contact-shop a.tel {
+      background: linear-gradient(135deg, #4f7cff, #6a5cff);
+      box-shadow: 0 6px 16px rgba(79,124,255,0.3);
+    }
+
+    /* ============== ANIMATIONS ============== */
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ============== CONFETTI (for ready/delivered orders) ============== */
+    .confetti-canvas {
+      position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    }
+
+    /* ============== RESPONSIVE ============== */
+    @media (max-width: 600px) {
+      .portal-wrap { padding: 12px 8px 30px; }
+      .timeline { gap: 2px; }
+      .step { min-width: 64px; }
+      .step .dot { width: 42px; height: 42px; font-size: 18px; }
+      .step .label { font-size: 9px; }
+      .connector { min-width: 8px; margin-top: -26px; margin-bottom: 26px; }
+      .portal-card { padding: 18px; border-radius: 18px; }
+      .portal-header h1 { font-size: 24px; }
+      .portal-header img { max-width: 110px; max-height: 90px; }
+      .welcome { font-size: 18px; }
+      .summary-cards .card-num .v { font-size: 22px; }
+      .quick-action .qa-icon { font-size: 26px; }
+    }
+
+    /* ============== SCROLLBAR ============== */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #4f7cff, #6a5cff);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #6a5cff, #8b5cf6); }
+
+
+    /* ============== MODALS ============== */
+    .portal-modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+      animation: modalFadeIn .25s ease;
+    }
+    @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .portal-modal {
+      background: #fff;
+      border-radius: 22px;
+      padding: 26px;
+      max-width: 520px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+      animation: modalSlideUp .35s cubic-bezier(.4,0,.2,1);
+    }
+    @keyframes modalSlideUp {
+      from { opacity: 0; transform: translateY(40px) scale(0.95); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .portal-modal h2, .portal-modal h3 {
+      margin: 0 0 14px; font-weight: 800; color: #1a2238;
+    }
+    .portal-modal .field { margin-bottom: 14px; }
+    .portal-modal .field label {
+      display: block; font-weight: 700; font-size: 13px;
+      margin-bottom: 6px; color: #374151;
+    }
+    .portal-modal .field input,
+    .portal-modal .field textarea,
+    .portal-modal .field select {
+      width: 100%; padding: 12px 14px; font-size: 15px;
+      border: 2px solid #e5e9f2; border-radius: 10px;
+      font-family: inherit; transition: all .2s ease;
+      background: #f8fafc;
+    }
+    .portal-modal .field input:focus,
+    .portal-modal .field textarea:focus,
+    .portal-modal .field select:focus {
+      outline: none; border-color: #4f7cff; background: #fff;
+      box-shadow: 0 0 0 4px rgba(79,124,255,0.12);
+    }
+    .portal-modal .form-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    .portal-modal .modal-footer {
+      display: flex; gap: 10px; justify-content: flex-end;
+      margin-top: 18px; padding-top: 14px;
+      border-top: 1px solid #e5e9f2;
+      flex-wrap: wrap;
+    }
+    .portal-modal .btn {
+      padding: 12px 22px; border: none; border-radius: 10px;
+      font-weight: 700; cursor: pointer; font-size: 14px;
+      font-family: inherit; transition: all .2s ease;
+    }
+    .portal-modal .btn-ghost {
+      background: #f3f4f6; color: #374151;
+    }
+    .portal-modal .btn-ghost:hover { background: #e5e7eb; }
+    .portal-modal .btn-success {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff;
+      box-shadow: 0 6px 16px rgba(34,197,94,0.35);
+    }
+    .portal-modal .btn-success:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(34,197,94,0.45); }
+    .portal-modal .btn-primary {
+      background: linear-gradient(135deg, #4f7cff, #6a5cff);
+      color: #fff;
+      box-shadow: 0 6px 16px rgba(79,124,255,0.35);
+    }
+    .portal-modal .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(79,124,255,0.45); }
+
+    /* Portal toast */
+    @keyframes toastSlide {
+      from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+      to   { transform: translateX(-50%) translateY(0); opacity: 1; }
+    }
+
+    .portal-tab button > span { pointer-events: none; }
+    .quick-action > span { pointer-events: none; }
+
+    @media (max-width: 600px) {
+      .portal-modal { padding: 20px; border-radius: 18px; }
+      .portal-modal .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="modal-root"></div>
+  <div id="toast-container"></div>
+  <div class="portal-wrap">
+    <!-- Floating soap bubble decorations -->
+    <div class="bubble" style="left:8%;width:18px;height:18px;animation-delay:0s;"></div>
+    <div class="bubble" style="left:18%;width:32px;height:32px;animation-delay:2.5s;"></div>
+    <div class="bubble" style="left:30%;width:14px;height:14px;animation-delay:5s;"></div>
+    <div class="bubble" style="left:45%;width:24px;height:24px;animation-delay:1.2s;"></div>
+    <div class="bubble" style="left:58%;width:38px;height:38px;animation-delay:3.8s;"></div>
+    <div class="bubble" style="left:70%;width:16px;height:16px;animation-delay:0.7s;"></div>
+    <div class="bubble" style="left:82%;width:28px;height:28px;animation-delay:4.2s;"></div>
+    <div class="bubble" style="left:92%;width:20px;height:20px;animation-delay:6s;"></div>
+    <div class="portal-container">
+      <div class="portal-topbar">
+        <button class="lang-btn" onclick="openPortalLangPicker()">🌐 <span id="langLabel">Language</span></button>
+        <button class="shop-info-btn" onclick="openShopInfoDialog()">🏪 <span id="shopLabel" data-i18n="shop_info">Shop Info</span></button>
+      </div>
+      <div class="portal-header">
+        <img src="assets/img/logo.jpeg" alt="logo" onerror="this.style.display='none'"/>
+        <h1 id="shopName">Laundry POS</h1>
+        <p>📦 <span data-i18n="track_orders">Track your order status anytime, anywhere</span></p>
+      </div>
+
+      <div class="portal-card" style="padding:16px;">
+        <div class="quick-actions">
+          <a href="reviews.html" class="quick-action qa-reviews">
+            <span class="qa-icon">⭐</span>
+            <span data-i18n="rate_order">Reviews</span>
+          </a>
+          <button onclick="openPickupRequestPortal()" class="quick-action qa-pickup">
+            <span class="qa-icon">🚚</span>
+            <span data-i18n="request_pickup">Request Pickup</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="portal-card">
+        <div class="portal-tab">
+          <button class="active" data-tab="phone">📱 <span data-i18n="search_phone">Search by Phone</span></button>
+          <button data-tab="invoice">🧾 <span data-i18n="search_invoice">Search by Invoice #</span></button>
+        </div>
+
+        <label id="searchLbl" style="font-weight:700;font-size:13px;display:block;margin-bottom:6px;"><span data-i18n="enter_phone">Enter Your Contact Number</span></label>
+        <input id="searchInp" class="big-input" placeholder="03XX-XXXXXXX"/>
+        <button class="big-btn" id="searchBtn">🔍 <span data-i18n="track_btn">Track My Order</span></button>
+      </div>
+
+      <div id="result"></div>
+
+      <div class="contact-shop" id="contactShop" style="display:none;">
+        <div style="font-weight:700;margin-bottom:8px;">Need help? Contact us:</div>
+        <a href="#" id="contactCall" class="tel">📞 Call Shop</a>
+        <a href="#" id="contactWa">💬 WhatsApp</a>
+      </div>
+
+      <!-- Terms & Conditions card -->
+      <div class="portal-card" id="termsCard" style="padding:0;overflow:hidden;">
+        <button id="termsToggle" type="button" style="width:100%;padding:18px 20px;background:#fff;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-weight:700;font-size:15px;color:#222;">
+          <span>📜 <span id="termsTitle">Terms &amp; Conditions</span></span>
+          <span id="termsArrow" style="transition:.2s;font-size:18px;color:#4f7cff;">▼</span>
+        </button>
+        <div id="termsBody" style="display:none;padding:0 20px 20px;border-top:1px solid #eef1f7;">
+          <div id="termsContent" style="font-size:13px;line-height:1.7;color:#444;white-space:pre-wrap;padding-top:14px;"></div>
+          <div style="margin-top:14px;padding:12px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:8px;font-size:12px;color:#92400e;">
+            ⚠️ <strong id="termsNoteTitle">Please Note:</strong> <span id="termsNoteBody">By giving your articles to Laundry POS for any service, you automatically agree to all the terms above.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-help">
+        Powered by Laundry POS POS<br>
+        <a href="index.html">Staff Login →</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/i18n.js"></script>
+  <script src="assets/js/portal-i18n.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/portal-helpers.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script>
+    /* ============================================================
+       MR LAUNDRY — PORTAL FIREBASE SYNC
+       Allows the portal to search cloud data and submit pickups!
+       ============================================================ */
+    /* ------------------------------------------------------------------
+       Firebase settings are NOT hard-coded here.
+       The portal reuses the project the shop owner saved in the POS
+       (Settings → Cloud Sync → paste firebaseConfig).
+       A new owner configures Firebase once in the POS and this page
+       picks it up automatically on next load.
+       ------------------------------------------------------------------ */
+    const HARDCODED_FIREBASE_CFG = {
+      apiKey: "",
+      authDomain: "",
+      projectId: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+    const HARDCODED_SHOP_ID = '';
+
+    function readSavedFirebaseCfg() {
+      try {
+        const raw = localStorage.getItem('mrLaundryFirebaseCfg');
+        if (!raw) return null;
+        const cfg = JSON.parse(raw);
+        return (cfg && cfg.apiKey) ? cfg : null;
+      } catch (e) { return null; }
+    }
+
+    const FIREBASE_CFG = HARDCODED_FIREBASE_CFG.apiKey
+      ? HARDCODED_FIREBASE_CFG
+      : (readSavedFirebaseCfg() || HARDCODED_FIREBASE_CFG);
+    const SHOP_ID = HARDCODED_SHOP_ID || (localStorage.getItem('mrLaundryShopId') || '');
+
+    // Lazy init: don't crash the whole portal when Cloud Sync isn't set up yet.
+    let _fdbInstance = null;
+    function fdb() {
+      if (_fdbInstance) return _fdbInstance;
+      if (!FIREBASE_CFG || !FIREBASE_CFG.apiKey) {
+        throw new Error('Cloud Sync is not configured yet. In the POS go to Settings → Cloud Sync.');
+      }
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CFG);
+      _fdbInstance = firebase.firestore();
+      return _fdbInstance;
+    }
+
+    // Block DB save to localStorage so we don't pollute customer devices with shop data!
+    DB.save = function() {}; 
+
+    async function loadPortalData() {
+      try {
+        const btn = document.getElementById('searchBtn');
+        if (btn) btn.innerHTML = '<i>↻</i> Loading...';
+        
+        const mainDoc = await fdb().collection('shops').doc(SHOP_ID).get();
+        if (!mainDoc.exists) return;
+        const meta = mainDoc.data();
+        if (!meta.tables) return;
+        
+        const tablesRef = fdb().collection('shops').doc(SHOP_ID).collection('tables');
+        const tablesToFetch = ['orders', 'customers', 'products', 'settings'];
+        
+        let fetched = {};
+        for (const tbl of tablesToFetch) {
+          if (!meta.tables[tbl]) continue;
+          const info = meta.tables[tbl];
+          if (info.chunks === 1) {
+             const doc = await tablesRef.doc(tbl).get();
+             if (doc.exists) fetched[tbl] = JSON.parse(doc.data().data);
+          } else {
+             const chunks = [];
+             for (let i=0; i<info.chunks; i++) {
+               const doc = await tablesRef.doc(`${tbl}__c${i}`).get();
+               if (doc.exists) chunks[i] = doc.data().data;
+             }
+             fetched[tbl] = JSON.parse(chunks.join(''));
+          }
+        }
+        
+        if (fetched.orders) DB._data.orders = fetched.orders;
+        if (fetched.customers) DB._data.customers = fetched.customers;
+        if (fetched.products) DB._data.products = fetched.products;
+        if (fetched.settings) {
+           DB._data.settings = Object.assign({}, DB._data.settings, fetched.settings);
+           const s = DB._data.settings;
+           document.getElementById('shopName').textContent = s.shopName || 'Laundry POS';
+           document.title = (s.shopName || 'Laundry POS') + ' — Order Tracker';
+           if (s.phone) {
+               const cb = document.getElementById('contactCall');
+               const wb = document.getElementById('contactWa');
+               if (cb) cb.href = 'tel:' + s.phone.replace(/[^\d+]/g, '');
+               let wp = s.phone.replace(/[^\d+]/g, '');
+               if (wp.startsWith('+')) wp = wp.substring(1);
+               if (wp.startsWith('0') && wp.length === 11) wp = '92' + wp.substring(1);
+               if (wb) wb.href = 'https://wa.me/' + wp;
+               document.getElementById('contactShop').style.display = 'block';
+           }
+        }
+        
+        if (btn) btn.innerHTML = '<i>🔍</i> <span data-i18n="search">Search Orders</span>';
+        if (typeof hydrateI18n === 'function') hydrateI18n();
+      } catch(e) {
+        console.error("Portal Data Load Error:", e);
+        const btn = document.getElementById('searchBtn');
+        if (btn) btn.innerHTML = '<i>🔍</i> <span data-i18n="search">Search Orders</span>';
+        // Friendly notice instead of a silent failure when the shop has not
+        // connected its own Firebase project yet.
+        if (/not configured|Cloud Sync/i.test(e && e.message || '')) {
+          if (typeof toast === 'function') {
+            toast('This shop has not connected Cloud Sync yet. Please contact them.', 'error');
+          } else {
+            alert('This shop has not connected Cloud Sync yet. Please contact them.');
+          }
+        }
+      }
+    }
+
+    async function pushPickupRequestToCloud(req) {
+      const tbl = 'pickupRequests';
+      const metaRef = fdb().collection('shops').doc(SHOP_ID);
+      const tablesRef = metaRef.collection('tables');
+      
+      try {
+        await fdb().runTransaction(async (t) => {
+          const metaDoc = await t.get(metaRef);
+          let meta = metaDoc.data() || { tables: {} };
+          if (!meta.tables) meta.tables = {};
+          
+          let currentData = [];
+          if (meta.tables[tbl]) {
+            const info = meta.tables[tbl];
+            if (info.chunks === 1) {
+              const cDoc = await t.get(tablesRef.doc(tbl));
+              if (cDoc.exists) currentData = JSON.parse(cDoc.data().data);
+            } else {
+              const chunks = [];
+              for (let i=0; i<info.chunks; i++) {
+                 const cDoc = await t.get(tablesRef.doc(`${tbl}__c${i}`));
+                 if (cDoc.exists) chunks.push(cDoc.data().data);
+              }
+              currentData = JSON.parse(chunks.join(''));
+            }
+          }
+          
+          currentData.push(req);
+          
+          const str = JSON.stringify(currentData);
+          meta.tables[tbl] = { chunks: 1, size: str.length, updatedAt: Date.now() };
+          
+          t.set(metaRef, meta, {merge: true});
+          t.set(tablesRef.doc(tbl), { data: str });
+        });
+        return true;
+      } catch(e) {
+        console.error("Failed to push pickup request to cloud", e);
+        return false;
+      }
+    }
+
+    // Call immediately
+    document.addEventListener('DOMContentLoaded', loadPortalData);
+
+    // Patch DB.insert for pickupRequests so it goes to cloud directly
+    if (typeof DB !== 'undefined') {
+      const origInsert = DB.insert.bind(DB);
+      DB.insert = function(table, rec) {
+        const res = origInsert(table, rec);
+        if (table === 'pickupRequests') {
+           pushPickupRequestToCloud(res).then(success => {
+              if(!success) alert('Failed to sync pickup request. Please contact shop.');
+           });
+        }
+        return res;
+      };
+    }
+  </script>
+
+  <script>
+
+    /* Hydrate all data-i18n elements with translated text */
+    function hydrateI18n() {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        var key = el.getAttribute('data-i18n');
+        if (typeof pt === 'function') {
+          var txt = pt(key);
+          if (txt && txt !== key) el.textContent = txt;
+        }
+      });
+    }
+    // Run on initial load
+    document.addEventListener('DOMContentLoaded', hydrateI18n);
+    try { hydrateI18n(); } catch(e){}
+    /* ====================== CONFETTI 🎉 ====================== */
+    function fireConfetti(duration) {
+      duration = duration || 2500;
+      var canvas = document.createElement('canvas');
+      canvas.className = 'confetti-canvas';
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      document.body.appendChild(canvas);
+      var ctx = canvas.getContext('2d');
+      var colors = ['#ff6b6b','#feca57','#48dbfb','#ff9ff3','#54a0ff','#5f27cd','#22c55e','#f59e0b','#ec4899'];
+      var particles = [];
+      for (var i = 0; i < 120; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: -10 - Math.random() * 200,
+          r: 4 + Math.random() * 6,
+          c: colors[Math.floor(Math.random() * colors.length)],
+          vx: (Math.random() - 0.5) * 3,
+          vy: 2 + Math.random() * 4,
+          rot: Math.random() * 360,
+          vrot: (Math.random() - 0.5) * 10,
+          shape: Math.random() > 0.5 ? 'rect' : 'circle'
+        });
+      }
+      var start = Date.now();
+      function loop() {
+        var elapsed = Date.now() - start;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(function(p) {
+          p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+          p.vy += 0.05; // gravity
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot * Math.PI / 180);
+          ctx.fillStyle = p.c;
+          if (p.shape === 'rect') {
+            ctx.fillRect(-p.r, -p.r/2, p.r*2, p.r);
+          } else {
+            ctx.beginPath(); ctx.arc(0, 0, p.r, 0, Math.PI*2); ctx.fill();
+          }
+          ctx.restore();
+        });
+        if (elapsed < duration) requestAnimationFrame(loop);
+        else canvas.remove();
+      }
+      loop();
+    }
+    window.fireConfetti = fireConfetti;
+
+    /* Fire confetti automatically when a "ready" order is shown */
+    function maybeCelebrateReadyOrders(orders) {
+      if (!Array.isArray(orders)) return;
+      var hasReady = orders.some(function(o){ return o.status === 'ready'; });
+      // Only celebrate once per session to avoid annoying repeats
+      if (hasReady && !sessionStorage.getItem('mrlConfettiShown')) {
+        sessionStorage.setItem('mrlConfettiShown', '1');
+        setTimeout(function(){ fireConfetti(2500); }, 600);
+      }
+    }
+    window.maybeCelebrateReadyOrders = maybeCelebrateReadyOrders;
+
+
+    const s = DB.settings();
+    document.getElementById('shopName').textContent = s.shopName || 'Laundry POS';
+    document.title = (s.shopName || 'Laundry POS') + ' — Order Tracker';
+
+    // Contact buttons
+    if (s.phone) {
+      const cb = document.getElementById('contactCall');
+      const wb = document.getElementById('contactWa');
+      cb.href = 'tel:' + s.phone.replace(/[^\d+]/g, '');
+      let wp = s.phone.replace(/[^\d+]/g, '');
+      if (wp.startsWith('+')) wp = wp.substring(1);
+      if (wp.startsWith('0') && wp.length === 11) wp = '92' + wp.substring(1);
+      wb.href = 'https://wa.me/' + wp;
+      document.getElementById('contactShop').style.display = 'block';
+    }
+
+    let tab = 'phone';
+    const searchLbl = document.getElementById('searchLbl');
+    const searchInp = document.getElementById('searchInp');
+    const result = document.getElementById('result');
+
+    document.querySelectorAll('.portal-tab button').forEach(b => b.onclick = (ev) => {
+      // Find the actual button (in case user clicked the inner span)
+      const btn = ev.currentTarget;
+      document.querySelectorAll('.portal-tab button').forEach(x => x.classList.remove('active'));
+      btn.classList.add('active');
+      tab = btn.dataset.tab;
+      if (tab === 'phone') {
+        searchLbl.textContent = pt('enter_phone');
+        searchInp.placeholder = '03XX-XXXXXXX';
+        searchInp.type = 'tel';
+      } else {
+        searchLbl.textContent = pt('enter_invoice');
+        searchInp.placeholder = 'e.g. INV-1023 or 1023';
+        searchInp.type = 'text';
+      }
+      searchInp.value = '';
+      result.innerHTML = '';
+      searchInp.focus();
+    });
+
+    document.getElementById('searchBtn').onclick = doSearch;
+    searchInp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+    function doSearch() {
+      const q = searchInp.value.trim();
+      if (!q) { searchInp.focus(); return; }
+      let orders = [];
+      let customer = null;
+
+      if (tab === 'phone') {
+        const cleanQ = q.replace(/[^\d]/g, '');
+        customer = DB.all('customers').find(c => {
+          const cp = (c.phone || '').replace(/[^\d]/g, '');
+          return cp && cp === cleanQ;
+        });
+        if (!customer) {
+          result.innerHTML = noResultsHTML('We couldn\'t find any orders for this phone number.', 'Please double-check your number, or contact us using the buttons below.');
+          return;
+        }
+        orders = DB.all('orders').filter(o => o.customerId === customer.id);
+      } else {
+        const invNum = q.replace(/[^\d]/g, '');
+        orders = DB.all('orders').filter(o => String(o.invoiceNo||'') === invNum || o.id.slice(-6).toLowerCase() === q.toLowerCase());
+        if (orders.length) customer = DB.get('customers', orders[0].customerId);
+      }
+
+      if (!orders.length) { result.innerHTML = noResultsHTML(pt('no_orders'), pt('check_number')); return; }
+      renderOrders(orders, customer);
+    }
+
+    function noResultsHTML(title, sub) {
+      return `<div class="portal-card"><div class="order-empty"><div class="emo">🤷</div><h3>${title}</h3><p style="color:#666;margin-top:8px;">${sub}</p></div></div>`;
+    }
+
+    // STATUS STEPS — must match order.status values
+    const STEPS = [
+      { id:'pending',   label:pt('booked'),     icon:'📝' },
+      { id:'washing',   label:pt('washing'),    icon:'🌀' },
+      { id:'ready',     label:pt('ready'),      icon:'✅' },
+      { id:'delivered', label:pt('delivered'),  icon:'📦' }
+    ];
+
+    function renderTimeline(currentStatus) {
+      if (currentStatus === 'cancelled') {
+        return `<div style="text-align:center;padding:20px;background:#fee2e2;border-radius:12px;color:#991b1b;font-weight:700;">❌ This order was cancelled</div>`;
+      }
+      const currentIdx = STEPS.findIndex(s => s.id === currentStatus);
+      let html = '<div class="timeline">';
+      STEPS.forEach((step, i) => {
+        let cls = '';
+        if (i < currentIdx) cls = 'done';
+        else if (i === currentIdx) cls = 'current';
+        html += `<div class="step ${cls}"><div class="dot">${cls==='done'?'✓':step.icon}</div><div class="label">${step.label}</div></div>`;
+        if (i < STEPS.length - 1) {
+          html += `<div class="connector ${i < currentIdx ? 'done' : ''}"></div>`;
+        }
+      });
+      html += '</div>';
+      return html;
+    }
+
+    function statusMessage(status, deliveryDate) {
+      const messages = {
+        pending:   `📝 ${pt('msg_pending')}`,
+        washing:   `🌀 ${pt('msg_washing')}`,
+        ready:     `✅ ${pt('msg_ready')}`,
+        delivered: `📦 ${pt('msg_delivered')}`,
+        cancelled: `❌ ${pt('msg_cancelled')}`
+      };
+      return messages[status] || '';
+    }
+
+    function renderOrders(orders, c) {
+      orders.forEach(o => { if (typeof getCalculatedStatus === 'function') o.status = getCalculatedStatus(o); });
+      orders.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+      try { maybeCelebrateReadyOrders(orders); } catch(e){}
+      const totalDue = orders.reduce((s,o)=>s+(o.due||0),0);
+      const totalSpent = orders.reduce((s,o)=>s+(o.total||0),0);
+      const pending = orders.filter(o => ['pending','washing','ready'].includes(o.status)).length;
+      const ready = orders.filter(o => o.status === 'ready').length;
+
+      let html = `<div class="portal-card">
+        <div class="welcome">👋 ${pt("welcome")}, ${escapeHtml(c.name||'Customer')}!</div>
+        <div class="summary-cards">
+          <div class="card-num"><div class="l">${pt("total_orders")}</div><div class="v">${orders.length}</div></div>
+          ${ready > 0 ? `<div class="card-num highlight"><div class="l">✅ ${pt("ready_now")}</div><div class="v">${ready}</div></div>` : ''}
+          <div class="card-num"><div class="l">${pt("in_progress")}</div><div class="v">${pending}</div></div>
+          ${totalDue > 0 ? `<div class="card-num" style="border-color:#ef4444;"><div class="l">${pt("due_label")}</div><div class="v" style="color:#ef4444;">${fmtMoney(totalDue)}</div></div>` : ''}
+        </div>
+        ${totalDue > 0 ? `<div class="pay-due-banner"><b>💰 ${pt("outstanding")}: ${fmtMoney(totalDue)}</b><br><small>${pt("pay_now")}</small></div>` : ''}
+      </div>`;
+
+      orders.slice(0, 10).forEach(o => {
+        const invNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#'+o.id.slice(-6).toUpperCase();
+        const totalPcs = (o.items||[]).reduce((s,i)=>s+(i.qty||0),0);
+        const delDate = o.deliveryDate || 'TBD';
+        const isReady = o.status === 'ready';
+
+        html += `<div class="tracker">
+          <div class="tracker-header">
+            <div>
+              <div class="tracker-inv">${invNo}</div>
+              <div class="tracker-date">📅 ${pt("booked_on")}: ${fmtDateShort(o.createdAt)}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px;color:#666;">${pt("ord_total")||"Total"}</div>
+              <div style="font-weight:800;font-size:18px;color:#4f7cff;">${fmtMoney(o.total)}</div>
+            </div>
+          </div>
+
+          ${isReady ? '<div class="ready-banner">🎉 Your order is READY for pickup! 🎉</div>' : ''}
+
+          <div style="text-align:center;font-size:13px;color:#1a2238;font-weight:600;margin:10px 0 4px;">
+            ${statusMessage(o.status, delDate)}
+          </div>
+
+          ${renderTimeline(o.status)}
+
+          <div class="tracker-info">
+            <div class="info-card primary"><div class="lbl">${pt("pieces")}</div><div class="val">${totalPcs}</div></div>
+            <div class="info-card"><div class="lbl">${o.status === 'delivered' ? pt('delivered') : pt('expected')}</div><div class="val" style="font-size:13px;">${delDate}</div></div>
+            ${o.due > 0
+              ? `<div class="info-card danger"><div class="lbl">${pt("outstanding")}</div><div class="val">${fmtMoney(o.due)}</div></div>`
+              : `<div class="info-card success"><div class="lbl">${pt("payment")}</div><div class="val">✓ ${pt("paid")}</div></div>`}
+            ${o.deliveryType ? `<div class="info-card"><div class="lbl">${pt("packaging")}</div><div class="val" style="font-size:13px;text-transform:uppercase;">${o.deliveryType === 'hanger' ? '🧥 Hanger' : o.deliveryType === 'fold' ? '📦 Fold' : '🧺 Both'}</div></div>` : ''}
+          </div>
+
+          ${o.items && o.items.length ? `
+            <details class="items-section">
+              <summary>View ${o.items.length} items (${totalPcs} pcs)</summary>
+              <table>
+                ${o.items.map(it => {
+                  // Try item's saved image first, fallback to product lookup
+                  let img = it.image;
+                  if (!img || (!img.startsWith('data:') && !img.startsWith('http') && img.length > 4)) {
+                    const prod = it.productId ? DB.get('products', it.productId) : null;
+                    if (prod && prod.image) img = prod.image;
+                  }
+                  return `<tr>
+                    <td style="width:54px;padding:6px;">
+                      <div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#e0e7ff,#fff);display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #eef1f7;">
+                        ${typeof productImageHTML === 'function' ? productImageHTML(img, 44) : (img || '🧺')}
+                      </div>
+                    </td>
+                    <td><b>${escapeHtml(it.name)}</b></td>
+                    <td>×${it.qty}</td>
+                    <td>${fmtMoney((it.qty||0)*(it.price||0))}</td>
+                  </tr>`;
+                }).join('')}
+              </table>
+            </details>
+          ` : ''}
+
+          <div class="order-actions" style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;">
+            ${o.due > 0 ? `<button onclick="openPaymentProofDialog('${o.id}')" style="flex:1;min-width:130px;padding:10px 14px;border:none;background:#22c55e;color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">💳 Pay ${fmtMoney(o.due)}</button>` : ''}
+            <button onclick="downloadInvoicePDF('${o.id}')" style="flex:1;min-width:120px;padding:10px 14px;border:1px solid #e5e9f2;background:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">📄 Invoice PDF</button>
+            <button onclick="openMessageDialog('${o.customerId}','${o.id}')" style="flex:1;min-width:120px;padding:10px 14px;border:1px solid #e5e9f2;background:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">💬 Message</button>
+            ${o.status === 'delivered' ? `<button onclick="openReviewDialog('${o.id}')" style="flex:1;min-width:110px;padding:10px 14px;border:1px solid #f59e0b;background:#fef3c7;color:#92400e;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">⭐ Rate</button>` : ''}
+          </div>
+        </div>`;
+      });
+
+      if (orders.length > 10) {
+        html += `<div style="text-align:center;color:#fff;padding:10px;font-size:13px;">Showing latest 10 of ${orders.length} orders</div>`;
+      }
+
+      result.innerHTML = html;
+    }
+
+    // Auto-search if URL has ?phone=... or ?invoice=...
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get('phone')) {
+      tab = 'phone';
+      searchInp.value = urlParams.get('phone');
+      setTimeout(doSearch, 200);
+    } else if (urlParams.get('invoice')) {
+      tab = 'invoice';
+      document.querySelectorAll('.portal-tab button')[1].click();
+      searchInp.value = urlParams.get('invoice');
+      setTimeout(doSearch, 200);
+    } else {
+      searchInp.focus();
+    }
+
+    // Initialize portal language label
+    {
+      const lbl = document.getElementById('langLabel');
+      const meta = (typeof PORTAL_LANG_META !== 'undefined') ? PORTAL_LANG_META[PORTAL_LANG] : null;
+      if (lbl) lbl.textContent = meta ? meta.nativeName : 'EN';
+    }
+
+    // Show open/closed badge — auto-refreshes every minute
+    if (typeof getShopOpenStatus === 'function') {
+      const hdr = document.querySelector('.portal-header');
+      const badge = document.createElement('div');
+      badge.id = 'shopOpenBadge';
+      badge.className = 'open-badge';
+      if (hdr) hdr.appendChild(badge);
+
+      function refreshBadge() {
+        const status = getShopOpenStatus();
+        badge.className = 'open-badge ' + (status.open ? 'open' : 'closed');
+        // Translate "Open Now" / "Closed Now" / "Closed Today"
+        const labels = {
+          'Open Now':      { en: '✅ Open Now',          ur: '✅ ابھی کھلا ہے',         rmn: '✅ Khula Hai' },
+          'Closed Now':    { en: '❌ Closed Now',        ur: '❌ ابھی بند ہے',          rmn: '❌ Band Hai' },
+          'Closed Today':  { en: '❌ Closed Today',      ur: '❌ آج بند ہے',           rmn: '❌ Aaj Band Hai' },
+          'Open':          { en: '✅ Open',              ur: '✅ کھلا ہے',              rmn: '✅ Khula Hai' }
+        };
+        const lang = (typeof PORTAL_LANG !== 'undefined') ? PORTAL_LANG : 'en';
+        let text = status.msg;
+        if (labels[status.msg]) {
+          text = labels[status.msg][lang] || labels[status.msg].en;
+        } else {
+          // Dynamic msg like "Opens in 25 min" or "Closing in 10 min"
+          if (status.open) text = '✅ ' + status.msg;
+          else text = '❌ ' + status.msg;
+        }
+        badge.textContent = text;
+      }
+      refreshBadge();
+      // Auto-refresh every 60 seconds — badge always current!
+      setInterval(refreshBadge, 60 * 1000);
+    }
+
+    // Open Shop Info dialog
+    function openShopInfoDialog() {
+      const settings = DB.settings();
+      const phone = settings.phone || '';
+      let waPhone = phone.replace(/[^\d+]/g, '');
+      if (waPhone.startsWith('+')) waPhone = waPhone.substring(1);
+      if (waPhone.startsWith('0') && waPhone.length === 11) waPhone = '92' + waPhone.substring(1);
+
+      const html = '<h2>🏪 ' + escapeHtml(settings.shopName) + '</h2>' +
+        '<p style="color:#666;margin-bottom:14px;">' + escapeHtml(settings.tagline || '') + '</p>' +
+        '<div style="background:#f8faff;padding:14px;border-radius:10px;margin-bottom:14px;">' +
+        '<div style="font-weight:700;margin-bottom:6px;">⏰ Opening Hours:</div>' +
+        '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;color:#444;margin:0;">' + escapeHtml(settings.shopHours || 'Not configured yet') + '</pre>' +
+        '</div>' +
+        (settings.address ? '<div style="background:#f8faff;padding:14px;border-radius:10px;margin-bottom:14px;"><div style="font-weight:700;margin-bottom:6px;">📍 Address:</div><div style="font-size:13px;color:#444;">' + escapeHtml(settings.address) + '</div></div>' : '') +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+        (phone ? '<a href="tel:' + phone.replace(/[^\d+]/g,'') + '" style="padding:14px;background:#4f7cff;color:#fff;border-radius:10px;text-align:center;text-decoration:none;font-weight:700;">📞 Call</a>' : '') +
+        (waPhone ? '<a href="https://wa.me/' + waPhone + '" target="_blank" style="padding:14px;background:#22c55e;color:#fff;border-radius:10px;text-align:center;text-decoration:none;font-weight:700;">💬 WhatsApp</a>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">' +
+        '<button onclick="closeModal()" style="padding:10px 18px;background:#eee;border:none;border-radius:8px;cursor:pointer;font-weight:700;">Close</button>' +
+        '</div>';
+      openPortalModal(html);
+    }
+
+
+    /* ===== Request Pickup from Portal ===== */
+    function openPickupRequestPortal() {
+      const html = '<h2>\u{1F69A} Request Home Pickup</h2>' +
+        '<p style="color:#666;margin-bottom:14px;">Fill in your details and we will come pick up your laundry!</p>' +
+        '<div class="field"><label>Your Name *</label><input id="pkpName" type="text"/></div>' +
+        '<div class="field"><label>Phone *</label><input id="pkpPhone" type="tel" placeholder="03XX-XXXXXXX"/></div>' +
+        '<div class="field"><label>Address *</label><textarea id="pkpAddr" rows="2" placeholder="House #, street, area..."></textarea></div>' +
+        '<div class="form-row">' +
+        '  <div class="field"><label>Date *</label><input type="date" id="pkpDate"/></div>' +
+        '  <div class="field"><label>Time Slot</label>' +
+        '    <select id="pkpSlot">' +
+        '      <option value="9am-12pm">\u{1F305} 9 AM - 12 PM</option>' +
+        '      <option value="10am-2pm" selected>\u2600\uFE0F 10 AM - 2 PM</option>' +
+        '      <option value="2pm-6pm">\u{1F31E} 2 PM - 6 PM</option>' +
+        '      <option value="6pm-9pm">\u{1F306} 6 PM - 9 PM</option>' +
+        '    </select>' +
+        '  </div>' +
+        '</div>' +
+        '<div class="field"><label>Notes (optional)</label><textarea id="pkpNotes" rows="2" placeholder="Apartment #, landmarks..."></textarea></div>' +
+        '<div class="modal-footer">' +
+        '  <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
+        '  <button class="btn btn-success" id="pkpSubmit">\u{1F69A} Submit Request</button>' +
+        '</div>';
+      openPortalModal(html);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      document.getElementById('pkpDate').value = tomorrow.toISOString().slice(0, 10);
+      document.getElementById('pkpSubmit').onclick = function() {
+        const name = document.getElementById('pkpName').value.trim();
+        const phone = document.getElementById('pkpPhone').value.trim();
+        const addr = document.getElementById('pkpAddr').value.trim();
+        if (!name || !phone || !addr) { alert('Please fill name, phone, and address'); return; }
+        try {
+          DB.insert('pickupRequests', {
+            customerName: name,
+            customerPhone: phone,
+            address: addr,
+            pickupDate: document.getElementById('pkpDate').value,
+            pickupSlot: document.getElementById('pkpSlot').value,
+            notes: document.getElementById('pkpNotes').value.trim(),
+            status: 'pending',
+            source: 'portal'
+          });
+          closeModal();
+          showPortalToast('\u2705 Pickup request submitted! Our driver will contact you soon.', 'success');
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+      };
+    }
+
+  </script>
+  <script>
+    // Load Terms & Conditions from settings
+    (function loadTerms(){
+      try {
+        var s = DB.settings();
+        var t = (s && s.portalTerms) ? s.portalTerms : '';
+        if (!t || !t.trim()) {
+          document.getElementById('termsCard').style.display = 'none';
+          return;
+        }
+        document.getElementById('termsContent').textContent = t;
+        var lang = (localStorage.getItem('mrLaundryPortalLang') || 'en');
+        var labels = {
+          en:  { title:'Terms & Conditions', note:'Please Note:', body:'By giving your articles to Laundry POS for any service, you automatically agree to all the terms above.' },
+          ur:  { title:'شرائط و ضوابط',       note:'خاص نوٹ:',     body:'آپ کا اپنے کپڑے مسٹر لانڈری کو دینا، ان تمام شرائط سے اتفاق سمجھا جائے گا۔' },
+          rmn: { title:'Shartein aur Hidayaat', note:'Khaas Note:', body:'Aap apne kapde Laundry POS ko denay say in tamam shartoon say muttafiq hotay hain.' }
+        };
+        var L = labels[lang] || labels.en;
+        document.getElementById('termsTitle').textContent = L.title;
+        document.getElementById('termsNoteTitle').textContent = L.note;
+        document.getElementById('termsNoteBody').textContent = L.body;
+        var toggleBtn = document.getElementById('termsToggle');
+        var body = document.getElementById('termsBody');
+        var arrow = document.getElementById('termsArrow');
+        toggleBtn.onclick = function(){
+          var open = body.style.display !== 'none';
+          body.style.display = open ? 'none' : 'block';
+          arrow.style.transform = open ? 'rotate(0deg)' : 'rotate(180deg)';
+        };
+      } catch(e){ console.warn('terms load failed', e); }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <!-- Prevent browser from caching this page (so updates show immediately on mobile) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Laundry POS — Live Dashboard</title>
+  <link rel="icon" href="assets/img/logo.jpeg" />
+  <style>
+    /* ============================================================
+       MR LAUNDRY — LIVE DASHBOARD (Secret Page)
+       Read-only owner dashboard with PIN protection.
+       Reads data DIRECTLY from Firebase (no manual sync needed).
+       ============================================================ */
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---------- PIN LOCK SCREEN ---------- */
+    .lock-screen {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 999; padding: 20px;
+    }
+    .lock-box {
+      background: #fff; border-radius: 18px; padding: 30px 24px;
+      max-width: 340px; width: 100%; text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,.3);
+    }
+    .lock-box .logo {
+      width: 70px; height: 70px; border-radius: 16px; background: #0f172a;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 14px; overflow: hidden;
+    }
+    .lock-box .logo img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
+    .lock-box h2 { margin: 0 0 6px; font-size: 20px; }
+    .lock-box p { margin: 0 0 18px; font-size: 13px; color: #64748b; }
+    .pin-input {
+      width: 100%; padding: 16px; font-size: 24px; text-align: center;
+      letter-spacing: 12px; border: 2px solid #e2e8f0; border-radius: 12px;
+      outline: none; margin-bottom: 12px;
+      font-family: 'Courier New', monospace;
+    }
+    .pin-input:focus { border-color: #0f172a; }
+    .pin-btn {
+      width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+      background: #0f172a; color: #fff; border: none; border-radius: 12px;
+      cursor: pointer; transition: background .15s;
+    }
+    .pin-btn:hover { background: #1e293b; }
+    .pin-error { color: #dc2626; font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+    /* ---------- HEADER ---------- */
+    .top-bar {
+      background: #0f172a; color: #fff;
+      padding: 16px 20px; display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+    .top-bar .logo-box {
+      width: 44px; height: 44px; border-radius: 10px; background: #fff;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+      flex-shrink: 0;
+    }
+    .top-bar .logo-box img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+    .top-bar .title-block { flex: 1; min-width: 0; }
+    .top-bar .title-block h1 {
+      margin: 0; font-size: 17px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .top-bar .title-block .sub { font-size: 11px; opacity: .7; margin-top: 2px; }
+    .live-dot {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(34,197,94,.15); color: #4ade80;
+      padding: 5px 10px; border-radius: 14px;
+      font-size: 11px; font-weight: 700;
+    }
+    .live-dot::before {
+      content: ''; width: 7px; height: 7px; border-radius: 50%;
+      background: #4ade80; animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .3; }
+    }
+
+    /* ---------- MAIN CONTAINER ---------- */
+    .container { max-width: 720px; margin: 0 auto; padding: 16px; }
+
+    .date-banner {
+      background: #fff; border-radius: 14px; padding: 14px 18px;
+      margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 2px 8px rgba(15,23,42,.05);
+    }
+    .date-banner .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+    .date-banner .value { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+    .date-banner .right { text-align: right; }
+    .date-banner .right .label { font-size: 11px; }
+    .date-banner .right .value { font-size: 13px; color: #64748b; font-weight: 600; }
+
+    /* ---------- STAT CARDS GRID ---------- */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    @media (min-width: 600px) {
+      .grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    }
+
+    .card {
+      background: #fff; border-radius: 14px; padding: 18px 16px;
+      box-shadow: 0 2px 8px rgba(15,23,42,.05);
+      border-left: 4px solid #cbd5e1;
+      position: relative;
+      min-height: 110px;
+    }
+    .card .icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; margin-bottom: 10px;
+    }
+    .card .lbl {
+      font-size: 11px; color: #64748b; text-transform: uppercase;
+      letter-spacing: 1px; font-weight: 700; margin-bottom: 4px;
+    }
+    .card .val {
+      font-size: 22px; font-weight: 800; color: #0f172a;
+      line-height: 1.1; word-break: break-word;
+    }
+    .card .sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+    .card.sales    { border-left-color: #3b82f6; }
+    .card.sales    .icon { background: #dbeafe; color: #1d4ed8; }
+    .card.orders   { border-left-color: #8b5cf6; }
+    .card.orders   .icon { background: #ede9fe; color: #6d28d9; }
+    .card.cash     { border-left-color: #22c55e; }
+    .card.cash     .icon { background: #dcfce7; color: #15803d; }
+    .card.expense  { border-left-color: #ef4444; }
+    .card.expense  .icon { background: #fee2e2; color: #b91c1c; }
+    .card.due      { border-left-color: #f59e0b; }
+    .card.due      .icon { background: #fef3c7; color: #b45309; }
+    .card.profit   { border-left-color: #10b981; }
+    .card.profit   .icon { background: #d1fae5; color: #047857; }
+
+    /* ---------- LOADING / EMPTY / ERROR ---------- */
+    .status-box {
+      background: #fff; border-radius: 14px; padding: 30px 20px;
+      text-align: center; box-shadow: 0 2px 8px rgba(15,23,42,.05);
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #e2e8f0; border-top-color: #0f172a;
+      border-radius: 50%; animation: spin .8s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-box .msg { color: #64748b; font-size: 14px; }
+    .status-box.error { background: #fef2f2; border: 1px solid #fecaca; }
+    .status-box.error .msg { color: #b91c1c; }
+
+    /* ---------- FOOTER ---------- */
+    .footer {
+      text-align: center; padding: 20px; font-size: 11px; color: #94a3b8;
+    }
+    .footer .updated { font-weight: 600; color: #64748b; margin-bottom: 4px; }
+    .refresh-btn {
+      background: #fff; border: 1px solid #e2e8f0; color: #0f172a;
+      padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600;
+      cursor: pointer; margin-top: 8px;
+    }
+    .refresh-btn:hover { background: #f8fafc; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- ============== PIN LOCK SCREEN ============== -->
+  <div class="lock-screen" id="lockScreen">
+    <div class="lock-box">
+      <div class="logo">
+        <img src="assets/img/logo.jpeg" alt="" onerror="this.parentElement.innerHTML='🧺'"/>
+      </div>
+      <h2>Live Dashboard</h2>
+      <p>Enter PIN to continue</p>
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+             class="pin-input" id="pinInput" placeholder="••••" autofocus />
+      <button class="pin-btn" id="pinBtn">Unlock</button>
+      <div class="pin-error" id="pinError"></div>
+    </div>
+  </div>
+
+  <!-- ============== MAIN DASHBOARD ============== -->
+  <div id="dashboard" class="hidden">
+    <div class="top-bar">
+      <div class="logo-box">
+        <img src="assets/img/logo.jpeg" alt="" onerror="this.parentElement.innerHTML='🧺'"/>
+      </div>
+      <div class="title-block">
+        <h1 id="shopName">Laundry POS</h1>
+        <div class="sub">Live Owner Dashboard</div>
+      </div>
+      <div class="live-dot">LIVE</div>
+    </div>
+
+    <div class="container">
+      <div class="date-banner">
+        <div>
+          <div class="label">Today</div>
+          <div class="value" id="todayDate">—</div>
+        </div>
+        <div class="right">
+          <div class="label">Current Time</div>
+          <div class="value" id="currentTime">—</div>
+        </div>
+      </div>
+
+      <div id="contentArea">
+        <div class="status-box">
+          <div class="spinner"></div>
+          <div class="msg">Loading live data from cloud...</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="updated" id="lastUpdate">—</div>
+        <div>Auto-refreshing every 30 seconds</div>
+        <button class="refresh-btn" id="refreshBtn">🔄 Refresh Now</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ============================================================
+       🔐 SECRET DASHBOARD CONFIG  — EDIT ONLY THESE LINES
+       ============================================================ */
+
+    // 1) PIN (any 4-digit number you want, e.g., '7890')
+    const SECRET_PIN = '1234';
+
+    // 2) Firebase config — LEFT BLANK ON PURPOSE.
+    //    This page reads the Firebase project that the shop owner already saved
+    //    in the POS:   Settings → Cloud Sync → paste firebaseConfig → Connect.
+    //    So a new owner only configures Firebase ONCE, in the POS.
+    //
+    //    Only fill this block in if you deliberately want to hard-code a
+    //    different project for this page alone.
+    const HARDCODED_FIREBASE_CFG = {
+      apiKey: "",
+      authDomain: "",
+      projectId: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+
+    // 3) Shop ID — also taken automatically from the POS Cloud Sync settings.
+    const HARDCODED_SHOP_ID = '';
+
+    /* ---- resolved at runtime from what the POS saved (cloudsync.js) ---- */
+    function readSavedFirebaseCfg() {
+      try {
+        const raw = localStorage.getItem('mrLaundryFirebaseCfg');
+        if (!raw) return null;
+        const cfg = JSON.parse(raw);
+        return (cfg && cfg.apiKey) ? cfg : null;
+      } catch (e) { return null; }
+    }
+    const FIREBASE_CFG = HARDCODED_FIREBASE_CFG.apiKey
+      ? HARDCODED_FIREBASE_CFG
+      : (readSavedFirebaseCfg() || HARDCODED_FIREBASE_CFG);
+    const SHOP_ID = HARDCODED_SHOP_ID || (localStorage.getItem('mrLaundryShopId') || '');
+
+    /* ============================================================ */
+
+    const AUTO_REFRESH_MS = 30000; // 30 seconds
+    const SESSION_KEY = 'mrLaundryLiveUnlocked';
+
+    /* ----- PIN GATE ----- */
+    const lockScreen = document.getElementById('lockScreen');
+    const dashboard  = document.getElementById('dashboard');
+    const pinInput   = document.getElementById('pinInput');
+    const pinBtn     = document.getElementById('pinBtn');
+    const pinError   = document.getElementById('pinError');
+
+    function unlock() {
+      lockScreen.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+      sessionStorage.setItem(SESSION_KEY, '1');
+      startDashboard();
+    }
+    function tryUnlock() {
+      const v = (pinInput.value || '').trim();
+      if (v === SECRET_PIN) {
+        pinError.textContent = '';
+        unlock();
+      } else {
+        pinError.textContent = '❌ Incorrect PIN. Try again.';
+        pinInput.value = '';
+        pinInput.focus();
+      }
+    }
+    pinBtn.addEventListener('click', tryUnlock);
+    pinInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+
+    // Skip lock if already unlocked this session
+    if (sessionStorage.getItem(SESSION_KEY) === '1') unlock();
+
+    /* ----- TIME UPDATER ----- */
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function updateClock() {
+      const d = new Date();
+      const opts = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' };
+      document.getElementById('todayDate').textContent = d.toLocaleDateString('en-GB', opts);
+      document.getElementById('currentTime').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    /* ----- MONEY FORMATTER ----- */
+    function fmtMoney(n) {
+      n = +n || 0;
+      return 'Rs. ' + n.toLocaleString('en-PK', { maximumFractionDigits: 0 });
+    }
+
+    /* ============================================================
+       FIREBASE DIRECT READ
+       Reads same chunked structure your main POS writes.
+       Uses hardcoded config above — works on ANY device without setup.
+       ============================================================ */
+
+    // Unregister any service worker for this path (prevents POS service worker from caching live.html)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => {
+          if (reg.scope.includes('/live.html') || location.pathname.endsWith('/live.html')) {
+            // Don't unregister POS service worker entirely; just skip caching for this page
+          }
+        });
+      }).catch(()=>{});
+    }
+
+    async function loadFirebaseSDK() {
+      if (window.firebase?.firestore) return;
+      const scripts = [
+        'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js',
+        'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js'
+      ];
+      for (const src of scripts) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = src; s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+    }
+
+    let _db = null;
+    async function initFirebase() {
+      if (_db) return _db;
+      if (!FIREBASE_CFG || !FIREBASE_CFG.apiKey) {
+        throw new Error('Cloud Sync is not set up yet. Open the POS → Settings → Cloud Sync, paste your firebaseConfig, click Connect, then reload this page.');
+      }
+      if (!SHOP_ID) {
+        throw new Error('Shop ID is missing. Open the POS → Settings → Cloud Sync and save a Shop ID, then reload this page.');
+      }
+      await loadFirebaseSDK();
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CFG);
+      _db = firebase.firestore();
+      return _db;
+    }
+
+    async function fetchCloudData() {
+      const db = await initFirebase();
+      const shopId = SHOP_ID;
+      const docRef = db.collection('shops').doc(shopId);
+      const snap = await docRef.get();
+      if (!snap.exists) throw new Error('No cloud data found for this shop.');
+      const meta = snap.data();
+
+      // Chunked format (chunked-v1) — fetch needed tables only from 'tables' subcollection
+      if (meta._format === 'chunked-v1' && meta.tables) {
+        const tablesToFetch = ['orders', 'expenses', 'settings'];
+        const result = {};
+        const tablesRef = docRef.collection('tables');
+        for (const tbl of tablesToFetch) {
+          const info = meta.tables[tbl];
+          if (!info) { result[tbl] = (tbl === 'settings' ? {} : []); continue; }
+          const chunkCount = info.chunks || 1;
+          try {
+            if (chunkCount === 1) {
+              const doc = await tablesRef.doc(tbl).get();
+              if (doc.exists) result[tbl] = JSON.parse(doc.data().data);
+              else result[tbl] = (tbl === 'settings' ? {} : []);
+            } else {
+              const chunks = [];
+              for (let i = 0; i < chunkCount; i++) {
+                const doc = await tablesRef.doc(`${tbl}__c${i}`).get();
+                if (doc.exists) chunks[i] = doc.data().data;
+              }
+              if (chunks.length === chunkCount && chunks.every(c => c !== undefined)) {
+                result[tbl] = JSON.parse(chunks.join(''));
+              } else {
+                result[tbl] = (tbl === 'settings' ? {} : []);
+              }
+            }
+          } catch (e) {
+            console.warn(`Could not parse ${tbl}:`, e);
+            result[tbl] = (tbl === 'settings' ? {} : []);
+          }
+        }
+        return result;
+      }
+
+      // Older single-doc format fallback (legacy)
+      if (meta.data) {
+        try {
+          const parsed = JSON.parse(meta.data);
+          return {
+            orders:   parsed.orders   || [],
+            expenses: parsed.expenses || [],
+            settings: parsed.settings || {}
+          };
+        } catch (e) {}
+      }
+
+      return {
+        orders:   meta.orders   || [],
+        expenses: meta.expenses || [],
+        settings: meta.settings || {}
+      };
+    }
+
+    /* ============================================================
+       COMPUTE TODAY'S STATS
+       ============================================================ */
+    function todayKey() {
+      const d = new Date();
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    function computeTodayStats(data) {
+      const today = todayKey();
+      const orders = (data.orders || []).filter(o => o && !o._deleted);
+      const expenses = (data.expenses || []).filter(e => e && !e._deleted);
+
+      // Today's orders (booked today)
+      const todayOrders = orders.filter(o => (o.createdAt || '').slice(0, 10) === today);
+
+      // ────────────────────────────────────────────────────────────────
+      // Today's CASH RECEIVED  — matches main POS dashboard.js exactly
+      //
+      // Two sources combined:
+      //   1) o.paymentsLog[]  → installments paid today (any order, any date)
+      //   2) Initial payment at booking for today's orders that don't have
+      //      a corresponding paymentsLog entry (legacy / single-pay orders)
+      // ────────────────────────────────────────────────────────────────
+      let todayCash = 0;
+
+      // Source 1: paymentsLog entries dated today (across ALL orders)
+      for (const o of orders) {
+        if (!Array.isArray(o.paymentsLog)) continue;
+        for (const p of o.paymentsLog) {
+          if ((p.at || '').slice(0, 10) === today) {
+            todayCash += +p.amount || 0;
+          }
+        }
+      }
+
+      // Source 2: For TODAY's orders, count "first payment at booking"
+      //          (paid amount NOT already represented in paymentsLog)
+      for (const o of todayOrders) {
+        const logged = Array.isArray(o.paymentsLog)
+          ? o.paymentsLog.reduce((s, p) => s + (+p.amount || 0), 0)
+          : 0;
+        const firstPay = (+o.paid || 0) - logged;
+        if (firstPay > 0) todayCash += firstPay;
+      }
+
+      // Today's sales (gross sale value of orders booked today)
+      const todaySales = todayOrders.reduce((s, o) => s + (+o.total || 0), 0);
+
+      // Today's due (unpaid amount on today's orders)
+      const todayDue = todayOrders.reduce((s, o) => s + (+o.due || 0), 0);
+
+      // Today's expenses
+      const todayExp = expenses
+        .filter(e => (e.date || '').slice(0, 10) === today)
+        .reduce((s, e) => s + (+e.amount || 0), 0);
+
+      // Today's profit (cash basis — same as main POS dashboard)
+      const todayProfit = todayCash - todayExp;
+
+      const washCount = orders.filter(o => ['pending', 'washing'].includes(o.status)).length;
+      const deadlineCount = orders.filter(o => o.deliveryDate === today && o.status !== 'delivered' && o.status !== 'cancelled').length;
+
+      return {
+        todaySales,
+        todayOrderCount: todayOrders.length,
+        todayCash,
+        todayExp,
+        todayDue,
+        todayProfit,
+        washCount,
+        deadlineCount
+      };
+    }
+
+    /* ============================================================
+       RENDER DASHBOARD
+       ============================================================ */
+    function renderStats(stats, shopName) {
+      if (shopName) document.getElementById('shopName').textContent = shopName;
+
+      const grid = `
+        <div class="grid">
+          <div class="card sales">
+            <div class="icon">💰</div>
+            <div class="lbl">Today's Sales</div>
+            <div class="val">${fmtMoney(stats.todaySales)}</div>
+            <div class="sub">Gross sale value</div>
+          </div>
+          <div class="card orders">
+            <div class="icon">📦</div>
+            <div class="lbl">Orders Today</div>
+            <div class="val">${stats.todayOrderCount}</div>
+            <div class="sub">New bookings today</div>
+          </div>
+          <div class="card cash">
+            <div class="icon">💵</div>
+            <div class="lbl">Cash Received</div>
+            <div class="val">${fmtMoney(stats.todayCash)}</div>
+            <div class="sub">All payments today</div>
+          </div>
+          <div class="card expense">
+            <div class="icon">💸</div>
+            <div class="lbl">Expenses</div>
+            <div class="val">${fmtMoney(stats.todayExp)}</div>
+            <div class="sub">Today's spend</div>
+          </div>
+          <div class="card due">
+            <div class="icon">⏳</div>
+            <div class="lbl">Pending (Due)</div>
+            <div class="val">${fmtMoney(stats.todayDue)}</div>
+            <div class="sub">From today's orders</div>
+          </div>
+          <div class="card profit">
+            <div class="icon">📈</div>
+            <div class="lbl">Net Today</div>
+            <div class="val" style="color:${stats.todayProfit >= 0 ? '#047857' : '#b91c1c'};">${fmtMoney(stats.todayProfit)}</div>
+            <div class="sub">Cash in − Expenses</div>
+          </div>
+          <div class="card" style="background:#f0f9ff;border-left:4px solid #0ea5e9;">
+            <div class="icon" style="background:#0ea5e9;">🌀</div>
+            <div class="lbl" style="color:#0369a1;">To Wash & Iron</div>
+            <div class="val" style="color:#0284c7;">${stats.washCount || 0}</div>
+            <div class="sub">Total pending items</div>
+          </div>
+          <div class="card" style="background:#fff7ed;border-left:4px solid #ea580c;">
+            <div class="icon" style="background:#ea580c;">🚨</div>
+            <div class="lbl" style="color:#c2410c;">Deliveries Today</div>
+            <div class="val" style="color:#b45309;">${stats.deadlineCount || 0}</div>
+            <div class="sub">Undelivered orders due today</div>
+          </div>
+        </div>
+      `;
+      document.getElementById('contentArea').innerHTML = grid;
+    }
+
+    function renderError(message) {
+      document.getElementById('contentArea').innerHTML = `
+        <div class="status-box error">
+          <div style="font-size:36px;margin-bottom:8px;">⚠️</div>
+          <div class="msg" style="font-weight:600;margin-bottom:4px;">Could not load data</div>
+          <div class="msg" style="font-size:12px;">${escapeHtml(message)}</div>
+        </div>
+      `;
+    }
+
+    function renderLoading() {
+      document.getElementById('contentArea').innerHTML = `
+        <div class="status-box">
+          <div class="spinner"></div>
+          <div class="msg">Refreshing live data...</div>
+        </div>
+      `;
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    /* ============================================================
+       MAIN LOOP
+       ============================================================ */
+    let _refreshTimer = null;
+    let _firstLoad = true;
+
+    async function loadAndRender() {
+      try {
+        if (_firstLoad) renderLoading();
+        const data = await fetchCloudData();
+        const stats = computeTodayStats(data);
+        const shopName = (data.settings && data.settings.shopName) || 'Laundry POS';
+        renderStats(stats, shopName);
+        const now = new Date();
+        document.getElementById('lastUpdate').textContent =
+          '✅ Last updated: ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+        _firstLoad = false;
+      } catch (err) {
+        console.error('Live dashboard error:', err);
+        renderError(err.message || 'Unknown error');
+      }
+    }
+
+    function startDashboard() {
+      loadAndRender();
+      if (_refreshTimer) clearInterval(_refreshTimer);
+      _refreshTimer = setInterval(loadAndRender, AUTO_REFRESH_MS);
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      renderLoading();
+      loadAndRender();
+    });
+
+    // Pause refresh when tab hidden, resume when visible (saves battery on mobile)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (_refreshTimer) clearInterval(_refreshTimer);
+        _refreshTimer = null;
+      } else if (sessionStorage.getItem(SESSION_KEY) === '1') {
+        if (!_refreshTimer) {
+          loadAndRender();
+          _refreshTimer = setInterval(loadAndRender, AUTO_REFRESH_MS);
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -819,6 +819,8 @@
   <script src="assets/js/db.js"></script>
   <script src="assets/js/utils.js"></script>
   <script src="assets/js/portal-helpers.js"></script>
+  <!-- Built-in Firebase config + Shop ID (shared by every page) -->
+  <script src="assets/js/cloud-autoconfig.js?v=20261104.1"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script>
@@ -827,21 +829,14 @@
        Allows the portal to search cloud data and submit pickups!
        ============================================================ */
     /* ------------------------------------------------------------------
-       Firebase settings are NOT hard-coded here.
-       The portal reuses the project the shop owner saved in the POS
-       (Settings → Cloud Sync → paste firebaseConfig).
-       A new owner configures Firebase once in the POS and this page
-       picks it up automatically on next load.
+       The built-in config lives in assets/js/cloud-autoconfig.js (ONE place
+       for all pages), so a new device needs no API settings at all.
+       A config explicitly saved in the POS Settings still wins on that device.
        ------------------------------------------------------------------ */
-    const HARDCODED_FIREBASE_CFG = {
-      apiKey: "",
-      authDomain: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: ""
+    const HARDCODED_FIREBASE_CFG = window.CLOUD_AUTO_CONFIG || {
+      apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: ""
     };
-    const HARDCODED_SHOP_ID = '';
+    const HARDCODED_SHOP_ID = window.CLOUD_AUTO_SHOP_ID || '';
 
     function readSavedFirebaseCfg() {
       try {
@@ -852,10 +847,8 @@
       } catch (e) { return null; }
     }
 
-    const FIREBASE_CFG = HARDCODED_FIREBASE_CFG.apiKey
-      ? HARDCODED_FIREBASE_CFG
-      : (readSavedFirebaseCfg() || HARDCODED_FIREBASE_CFG);
-    const SHOP_ID = HARDCODED_SHOP_ID || (localStorage.getItem('mrLaundryShopId') || '');
+    const FIREBASE_CFG = readSavedFirebaseCfg() || HARDCODED_FIREBASE_CFG;
+    const SHOP_ID = (localStorage.getItem('mrLaundryShopId') || '').trim() || HARDCODED_SHOP_ID;
 
     // Lazy init: don't crash the whole portal when Cloud Sync isn't set up yet.
     let _fdbInstance = null;

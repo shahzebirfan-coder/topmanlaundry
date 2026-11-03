@@ -244,6 +244,8 @@
     </div>
   </div>
 
+  <!-- Built-in Firebase config + Shop ID (shared by every page) -->
+  <script src="assets/js/cloud-autoconfig.js?v=20261104.1"></script>
   <script>
     /* ============================================================
        🔐 SECRET DASHBOARD CONFIG  — EDIT ONLY THESE LINES
@@ -252,26 +254,17 @@
     // 1) PIN (any 4-digit number you want, e.g., '7890')
     const SECRET_PIN = '1234';
 
-    // 2) Firebase config — LEFT BLANK ON PURPOSE.
-    //    This page reads the Firebase project that the shop owner already saved
-    //    in the POS:   Settings → Cloud Sync → paste firebaseConfig → Connect.
-    //    So a new owner only configures Firebase ONCE, in the POS.
-    //
-    //    Only fill this block in if you deliberately want to hard-code a
-    //    different project for this page alone.
-    const HARDCODED_FIREBASE_CFG = {
-      apiKey: "",
-      authDomain: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: ""
+    // 2) Firebase config — comes from assets/js/cloud-autoconfig.js, the ONE
+    //    file shared by every page. No per-device setup needed any more.
+    //    A config explicitly saved in the POS Settings still wins on that device.
+    const HARDCODED_FIREBASE_CFG = window.CLOUD_AUTO_CONFIG || {
+      apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: ""
     };
 
-    // 3) Shop ID — also taken automatically from the POS Cloud Sync settings.
-    const HARDCODED_SHOP_ID = '';
+    // 3) Shop ID — same shared file; identical on every device.
+    const HARDCODED_SHOP_ID = window.CLOUD_AUTO_SHOP_ID || '';
 
-    /* ---- resolved at runtime from what the POS saved (cloudsync.js) ---- */
+    /* ---- runtime resolution: explicit POS setting > built-in config ---- */
     function readSavedFirebaseCfg() {
       try {
         const raw = localStorage.getItem('mrLaundryFirebaseCfg');
@@ -280,10 +273,8 @@
         return (cfg && cfg.apiKey) ? cfg : null;
       } catch (e) { return null; }
     }
-    const FIREBASE_CFG = HARDCODED_FIREBASE_CFG.apiKey
-      ? HARDCODED_FIREBASE_CFG
-      : (readSavedFirebaseCfg() || HARDCODED_FIREBASE_CFG);
-    const SHOP_ID = HARDCODED_SHOP_ID || (localStorage.getItem('mrLaundryShopId') || '');
+    const FIREBASE_CFG = readSavedFirebaseCfg() || HARDCODED_FIREBASE_CFG;
+    const SHOP_ID = (localStorage.getItem('mrLaundryShopId') || '').trim() || HARDCODED_SHOP_ID;
 
     /* ============================================================ */
 

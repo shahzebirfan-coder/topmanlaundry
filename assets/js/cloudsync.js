@@ -9,17 +9,67 @@
 
 const MAX_DOC_SIZE = 800000; // 800KB — safe margin under Firestore 1MB limit
 
+/* Accept anything a user is likely to paste from the Firebase console:
+     • plain JSON                      { "apiKey": "...", ... }
+     • const firebaseConfig = {...};   (JS object, unquoted keys, single quotes)
+     • firebase.initializeApp({...});
+     • the whole SDK snippet (with imports), fenced in ``` marks
+   No `new Function` in the common path, so it also works under a strict CSP. */
 function parseFirebaseConfig(text) {
-  if (!text) throw new Error('Empty config');
-  let s = text.trim();
-  s = s.replace(/^(const|let|var)\s+\w+\s*=\s*/, '');
-  s = s.replace(/;\s*$/, '');
-  s = s.replace(/^export\s+default\s*/, '');
-  s = s.trim();
-  try { return JSON.parse(s); } catch(e) {}
-  try { return (new Function('return (' + s + ')'))(); } catch(e) {
-    throw new Error('Could not parse config. Make sure you copied the firebaseConfig block correctly (from { to } including braces).');
+  let s = String(text || '').trim();
+  if (!s) throw new Error('Empty config — paste your firebaseConfig object');
+
+  // Strip markdown fences.
+  s = s.replace(/^```(?:json|js|javascript)?\s*/i, '').replace(/```\s*$/, '').trim();
+
+  /* Pull out the first balanced { ... } block starting at `start`. */
+  function blockAt(from) {
+    let depth = 0, quote = '', esc = false;
+    for (let i = from; i < s.length; i++) {
+      const c = s[i];
+      if (quote) {
+        if (esc) { esc = false; continue; }
+        if (c === '\\') { esc = true; continue; }
+        if (c === quote) quote = '';
+        continue;
+      }
+      if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
+      if (c === '{') depth++;
+      else if (c === '}') { depth--; if (depth === 0) return s.slice(from, i + 1); }
+    }
+    return null;
   }
+
+  /* Turn a JS-ish object literal into JSON where possible. */
+  function toObject(src) {
+    try { return JSON.parse(src); } catch (e) {}
+    try {
+      const normalised = src
+        .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+        .replace(/'((?:\\.|[^'\\])*)'/g, '"$1"')
+        .replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(normalised);
+    } catch (e) {}
+    try { return (new Function('return (' + src + ')'))(); } catch (e) { return null; }
+  }
+
+  /* The full SDK snippet contains other objects (`import { initializeApp }`).
+     Scan every { ... } block and keep the one that looks like a config. */
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== '{') continue;
+    const block = blockAt(i);
+    if (!block) continue;
+    const obj = toObject(block);
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) continue;
+
+    const clean = {};
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      if (v === null || ['string', 'number', 'boolean'].includes(typeof v)) clean[k] = v;
+    }
+    if (clean.apiKey || clean.projectId) return clean;
+  }
+  throw new Error('No firebaseConfig object found — copy the block that contains "apiKey" and "projectId".');
 }
 
 /* Stable per-install device ID */
@@ -54,19 +104,62 @@ const CLOUD = {
   _syncing: false, _pendingPush: false,
   _suppressPush: false,
   _initialMergeDone: false,
+  _initialSyncDone: false,
   _lastAppliedVersion: 0,
   _lastPushedJson: {},
   _toastDebounceTimer: null,
 
   getConfig() {
     const raw = localStorage.getItem(this.CFG_KEY);
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch(e) { return null; }
+    if (raw) {
+      try {
+        const c = JSON.parse(raw);
+        if (c && typeof c === 'object' && c.apiKey) return c;
+      } catch(e) {}
+    }
+    // Optional hard-coded key in assets/js/cloud-autoconfig.js — only used
+    // when nothing has been saved in Settings and the user hasn't cleared it.
+    if (localStorage.getItem('mrLaundryCloudCfgCleared') !== 'true') {
+      const auto = (typeof window !== 'undefined') ? window.CLOUD_AUTO_CONFIG : null;
+      if (auto && auto.apiKey && auto.projectId) return auto;
+    }
+    return null;
   },
-  setConfig(cfg) { localStorage.setItem(this.CFG_KEY, JSON.stringify(cfg)); },
-  getShopId() { return localStorage.getItem(this.SHOP_KEY) || ''; },
+  setConfig(cfg) {
+    localStorage.setItem(this.CFG_KEY, JSON.stringify(cfg));
+    localStorage.removeItem('mrLaundryCloudCfgCleared');
+    this._resetConnection();
+  },
+  clearConfig() {
+    localStorage.removeItem(this.CFG_KEY);
+    localStorage.removeItem(this.SHOP_KEY);
+    localStorage.removeItem(this.LAST_SYNC_KEY);
+    localStorage.setItem('mrLaundryCloudCfgCleared', 'true');
+    this._resetConnection();
+  },
+  _resetConnection() {
+    try { this.stop(); } catch (e) {}
+    this._db = null; this._app = null; this._cfgKey = '';
+    this._lastPushedJson = {}; this._lastPushedMeta = null;
+  },
+  getShopId() {
+    const saved = localStorage.getItem(this.SHOP_KEY);
+    if (saved) return saved;
+    // Built-in Shop ID from cloud-autoconfig.js → works on a brand-new device.
+    return (typeof window !== 'undefined' && window.CLOUD_AUTO_SHOP_ID) ? window.CLOUD_AUTO_SHOP_ID : '';
+  },
   setShopId(id) { localStorage.setItem(this.SHOP_KEY, id); },
-  isEnabled() { return localStorage.getItem(this.ENABLED_KEY) === 'true'; },
+  isEnabled() {
+    const v = localStorage.getItem(this.ENABLED_KEY);
+    if (v !== null) return v === 'true';   // explicit user choice always wins
+    // No choice yet on this device: auto-start when a config is built in.
+    const auto = (typeof window !== 'undefined') && window.CLOUD_AUTO_ENABLE === true;
+    return !!(auto && this.getConfig());
+  },
+  isAutoConfigured() {
+    return !!(typeof window !== 'undefined' && window.CLOUD_AUTO_ENABLE === true
+      && window.CLOUD_AUTO_CONFIG && window.CLOUD_AUTO_CONFIG.apiKey && !localStorage.getItem(this.CFG_KEY));
+  },
   setEnabled(v) { localStorage.setItem(this.ENABLED_KEY, v?'true':'false'); },
   isReady() { return !!(this.getConfig() && this.getShopId()); },
 
@@ -85,14 +178,26 @@ const CLOUD = {
     }
   },
 
-  async init() {
-    if (this._db) return this._db;
+  async init(force) {
     const cfg = this.getConfig();
-    if (!cfg) throw new Error('Firebase not configured');
+    if (!cfg) throw new Error('Firebase not configured — add your key in Settings → Cloud Sync');
+    if (!cfg.apiKey || !cfg.projectId) throw new Error('Saved config is missing apiKey or projectId');
     await this.loadSDK();
-    if (!firebase.apps.length) this._app = firebase.initializeApp(cfg);
-    else this._app = firebase.app();
+
+    const cfgKey = JSON.stringify(cfg);
+    if (this._db && this._cfgKey === cfgKey && !force) return this._db;
+
+    /* Firebase caches the FIRST config for the lifetime of the app. Without
+       tearing the app down, a newly pasted key was silently ignored. */
+    this._resetConnection();
+    try {
+      const apps = (window.firebase && firebase.apps) ? firebase.apps.slice() : [];
+      for (const a of apps) { try { await a.delete(); } catch (e) {} }
+    } catch (e) {}
+
+    this._app = firebase.initializeApp(cfg);
     this._db = firebase.firestore();
+    this._cfgKey = cfgKey;
     return this._db;
   },
 
@@ -341,6 +446,21 @@ const CLOUD = {
 
   stop() {
     if (this._unsub) { this._unsub(); this._unsub = null; }
+  },
+
+  /* First connection from a brand-new device: adopt the cloud dataset rather
+     than pushing this browser's demo/seed records into the shared shop DB.
+     (Without this, fresh installs could overwrite real data on first sync.) */
+  async adoptCloudIfPresent() {
+    const remote = await this.pull();
+    if (!remote || typeof remote !== 'object' || !Object.keys(remote).length) return false;
+    const merged = Object.assign({}, (typeof DB !== 'undefined' ? DB._data : {}) || {}, remote);
+    this._suppressPush = true;
+    try {
+      if (typeof DB !== 'undefined') { DB._data = merged; DB.save(); }
+    } finally { this._suppressPush = false; }
+    localStorage.setItem(this.LAST_SYNC_KEY, new Date().toISOString());
+    return true;
   }
 };
 
@@ -351,11 +471,21 @@ const CLOUD = {
     if (CLOUD.isEnabled() && CLOUD.isReady()) {
       try {
         await CLOUD.init();
-        await CLOUD.pullAndMerge();
+        /* A brand-new device with the built-in config must ADOPT the existing
+           cloud data, not push its local demo/seed records over the shop DB. */
+        const firstRun = !localStorage.getItem(CLOUD.LAST_SYNC_KEY);
+        let adopted = false;
+        if (firstRun && CLOUD.isAutoConfigured()) {
+          try { adopted = await CLOUD.adoptCloudIfPresent(); }
+          catch (e) { console.warn('First-run cloud adopt skipped:', e); }
+        }
+        if (!adopted) await CLOUD.pullAndMerge();
         await CLOUD.push();
         await CLOUD.listen();
         CLOUD._initialMergeDone = true;
-        console.log('[Laundry POS] Cloud sync active — chunked storage');
+        CLOUD._initialSyncDone = true;
+        console.log('[Laundry POS] Cloud sync active — chunked storage'
+          + (adopted ? ' (adopted cloud data on first run)' : ''));
         setTimeout(() => {
           if (typeof toast === 'function') toast('☁️ Cloud Sync active', 'success');
         }, 1500);
@@ -401,6 +531,7 @@ async function reconnectCloudSync() {
     await CLOUD.pullAndMerge();
     await CLOUD.push();
     await CLOUD.listen();
+    CLOUD._initialSyncDone = true;
     if (typeof toast === 'function') toast('✅ Cloud sync re-enabled!', 'success');
     setTimeout(() => location.reload(), 1000);
   } catch (e) {
@@ -464,6 +595,10 @@ async function reconnectCloudSync() {
     localStorage.setItem('mrLaundryLocalVersion', Date.now());
     if (CLOUD._suppressPush) return;
     if (!CLOUD.isEnabled() || !CLOUD.isReady()) return;
+    /* A fresh device must PULL first. Without this guard the 1.5s auto-push
+       beats the 2.5s initial sync and overwrites the shop's real cloud data
+       with this browser's demo/seed records. */
+    if (!CLOUD._initialSyncDone) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {
       CLOUD.push().catch(e => console.warn('Push failed:', e));
@@ -472,144 +607,327 @@ async function reconnectCloudSync() {
 })();
 
 /* ============== UI ============== */
-function openCloudSyncManager() {
+
+/* Status line under the Settings button. Updates EVERY status element, so a
+   duplicate / stale card can never show the wrong state again. */
+function cloudStatusHtml() {
+  const esc = (typeof escapeHtml === 'function') ? escapeHtml : (v) => String(v == null ? '' : v);
+  const cfg = CLOUD.getConfig();
+  if (CLOUD.isEnabled() && CLOUD.isReady()) {
+    const last = localStorage.getItem(CLOUD.LAST_SYNC_KEY);
+    return `✅ Active • Project: <b>${esc(cfg && cfg.projectId || '—')}</b> • Shop ID: <b>${esc(CLOUD.getShopId())}</b>`
+      + (last ? ` • Last sync: ${esc(new Date(last).toLocaleString())}` : '');
+  }
+  if (cfg) return '⏸️ Firebase key saved — sync paused (open Configure to enable)';
+  return '❌ No Firebase key set — click Configure to add one';
+}
+function refreshCloudStatus() {
+  try {
+    document.querySelectorAll('.cloud-status, #cloudStatus').forEach(el => el.innerHTML = cloudStatusHtml());
+  } catch (e) {}
+}
+
+function openCloudSyncManager(prefill) {
   const cfg = CLOUD.getConfig();
   const shopId = CLOUD.getShopId();
   const enabled = CLOUD.isEnabled();
   const lastSync = localStorage.getItem(CLOUD.LAST_SYNC_KEY);
   const deviceId = getDeviceId();
   const deviceLabel = getDeviceLabel();
+  const esc = (typeof escapeHtml === 'function') ? escapeHtml : (v) => String(v == null ? '' : v);
+  const cfgText = (typeof prefill === 'string')
+    ? prefill
+    : (cfg ? JSON.stringify(cfg, null, 2) : '');
+  const maskedKey = (cfg && cfg.apiKey)
+    ? esc(String(cfg.apiKey).slice(0, 6) + '…' + String(cfg.apiKey).slice(-4))
+    : '—';
+  const autoCfg = (typeof window !== 'undefined') ? window.CLOUD_AUTO_CONFIG : null;
+  const hasLocalOverride = !!localStorage.getItem(CLOUD.CFG_KEY);
+  const usingBuiltIn = !!(autoCfg && autoCfg.apiKey && !hasLocalOverride
+                          && localStorage.getItem('mrLaundryCloudCfgCleared') !== 'true');
 
   openModal(`
     <h3>☁️ Cloud Sync (Multi-Device)</h3>
-    <p class="sub">Real-time sync via Firebase. <b>Chunked storage</b> — supports unlimited data size!</p>
+    <p class="sub">Real-time sync via Firebase Firestore. Paste your <b>firebaseConfig</b> below to add a new key or replace the existing one.</p>
 
-    ${!cfg ? `
-      <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;">
-        ⚠️ <b>One-time setup required.</b> You need a free Firebase project (5 minutes).
-        <button class="btn btn-primary btn-sm" id="firebaseGuideBtn" style="margin-top:8px;">📖 Show Setup Guide</button>
-      </div>
-    ` : ''}
+    <div style="background:var(--surface-alt);padding:10px;border-radius:8px;font-size:12px;margin-bottom:14px;line-height:1.7;">
+      <b>Current project:</b> ${cfg ? esc(cfg.projectId || 'unknown') : '❌ none'}<br>
+      <b>API key:</b> <code>${maskedKey}</code> &nbsp;•&nbsp; <b>Shop ID:</b> ${shopId ? esc(shopId) : '❌ not set'}<br>
+      <b>Status:</b> ${enabled ? '✅ Sync ON' : '⏸️ Sync OFF'} &nbsp;•&nbsp; ${lastSync ? '🔄 Last sync: ' + esc(new Date(lastSync).toLocaleString()) : '⚠️ Never synced'}<br>
+      <b>Config source:</b> ${usingBuiltIn ? '✅ Built into the website (new devices connect automatically)' : (hasLocalOverride ? '💾 Saved in this browser (Settings)' : '⚠️ No config')}<br>
+      📱 This device: <b>${esc(deviceLabel)}</b> <code style="font-size:10px;">${esc(deviceId)}</code>
+    </div>
 
     <div class="field">
-      <label>Firebase Config JSON</label>
-      <textarea id="fbCfg" rows="8" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px;">${cfg ? escapeHtml(JSON.stringify(cfg, null, 2)) : ''}</textarea>
+      <label>Firebase Config / API Key</label>
+      <textarea id="fbCfg" rows="9" spellcheck="false" placeholder='{ "apiKey": "AIza...", "authDomain": "my-project.firebaseapp.com", "projectId": "my-project", "appId": "1:...:web:..." }' style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px;">${esc(cfgText)}</textarea>
+      <small style="display:block;color:var(--text-soft);margin-top:6px;line-height:1.5;">
+        Paste the whole <code>firebaseConfig</code> object from Firebase Console → Project settings → Your apps
+        (<code>const firebaseConfig = {...};</code> works too). To replace only the key, edit the <code>apiKey</code> line
+        above — or paste just the new <code>AIza…</code> key — then click <b>Save / Replace Firebase Key</b>.
+        Stored locally in this browser.
+      </small>
+      <div style="padding:8px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:12px;color:#78350f;margin-top:8px;">
+        ⚠️ <b>Do NOT paste Firestore security rules here.</b> Those go in the Firebase Console →
+        <b>Rules</b> tab. This box needs the object with <code>"apiKey"</code> and <code>"projectId"</code>.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button type="button" class="btn btn-secondary btn-sm" id="findCfgBtn">📍 Where do I find firebaseConfig?</button>
+        ${cfg ? `<button type="button" class="btn btn-ghost btn-sm" id="restoreCfgBtn">🔄 Restore saved key</button>` : ''}
+        ${(autoCfg && autoCfg.apiKey && hasLocalOverride) ? `<button type="button" class="btn btn-ghost btn-sm" id="resetToBuiltInBtn">↩️ Use built-in config</button>` : ''}
+      </div>
     </div>
 
     <div class="form-row">
       <div class="field">
         <label>Shop ID (unique to your business)</label>
-        <input id="shopId" value="${escapeHtml(shopId)}" placeholder="mr-laundry-main-branch"/>
+        <input id="shopId" value="${esc(shopId)}" placeholder="mr-laundry-main-branch"/>
         <small style="color:var(--text-soft);">⚠️ All devices MUST use the SAME Shop ID</small>
       </div>
       <div class="field">
-        <label>Status</label>
-        <div style="padding:10px;background:${enabled?'#d1fae5':'#fee2e2'};border-radius:8px;text-align:center;font-weight:700;">
+        <label>Sync status</label>
+        <div style="padding:10px;background:${enabled ? '#d1fae5' : '#fee2e2'};border-radius:8px;text-align:center;font-weight:700;">
           ${enabled ? '✅ Sync ON' : '❌ Sync OFF'}
         </div>
       </div>
     </div>
 
-    <div style="background:var(--surface-alt);padding:10px;border-radius:8px;font-size:12px;margin-bottom:14px;">
-      ${lastSync ? `🔄 Last sync: ${new Date(lastSync).toLocaleString()}` : '⚠️ Never synced'}
-      <br>📱 This device: <b>${escapeHtml(deviceLabel)}</b> <code style="font-size:10px;">${deviceId}</code>
-    </div>
-
-    <div style="display:flex;flex-direction:column;gap:8px;">
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+      <button type="button" class="btn btn-primary btn-block" id="saveCfgBtn">💾 Save / Replace Firebase Key</button>
       ${!enabled ? `
-        <button class="btn btn-success btn-block" id="enableBtn">✅ Enable Cloud Sync</button>
+        <button type="button" class="btn btn-success btn-block" id="enableBtn">✅ Save &amp; Enable Cloud Sync</button>
       ` : `
-        <button class="btn btn-success" id="mergeNowBtn">🔄 Merge Now (Pull + Push)</button>
-        <button class="btn btn-primary" id="pushNowBtn">⬆️ Force Push This Device → Cloud</button>
-        <button class="btn btn-warning" id="pullNowBtn">⬇️ Force Pull Cloud → This Device (OVERWRITE)</button>
-        <button class="btn btn-danger" id="disableBtn">⏸️ Pause Cloud Sync</button>
+        <button type="button" class="btn btn-success" id="mergeNowBtn">🔄 Merge Now (Pull + Push)</button>
+        <button type="button" class="btn btn-primary" id="pushNowBtn">⬆️ Force Push This Device → Cloud</button>
+        <button type="button" class="btn btn-warning" id="pullNowBtn">⬇️ Force Pull Cloud → This Device (OVERWRITE)</button>
+        <button type="button" class="btn btn-danger" id="disableBtn">⏸️ Pause Cloud Sync</button>
       `}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary" id="testCfgBtn" style="flex:1;min-width:140px;">🔌 Test Connection</button>
+        <button type="button" class="btn btn-ghost" id="firebaseGuideBtn" style="flex:1;min-width:120px;">📖 Setup Guide</button>
+        <button type="button" class="btn btn-danger" id="clearCfgBtn" style="flex:1;min-width:120px;">🗑️ Remove Key</button>
+      </div>
     </div>
 
     <div id="syncLog" style="margin-top:10px;font-size:12px;"></div>
 
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button>
     </div>
   `, { large: true, onOpen(m) {
-    const log = (msg, type='') => {
-      const colors = { error:'var(--danger)', success:'var(--success)', '':'var(--text-soft)' };
-      $('#syncLog', m).innerHTML = `<div style="padding:8px;background:var(--surface-alt);border-radius:6px;color:${colors[type]};">${msg}</div>`;
+    const log = (msg, type = '') => {
+      const colors = { error: 'var(--danger)', success: 'var(--success)', '': 'var(--text-soft)' };
+      const box = $('#syncLog', m);
+      if (box) box.innerHTML = `<div style="padding:8px;background:var(--surface-alt);border-radius:6px;color:${colors[type] || colors['']};">${esc(msg)}</div>`;
+    };
+    const logHtml = (html) => {
+      const box = $('#syncLog', m);
+      if (box) box.innerHTML = html;
     };
 
-    $('#firebaseGuideBtn', m)?.addEventListener('click', () => { closeModal(); openFirebaseSetupGuide(); });
+    /* The most common mistake: pasting the Firestore RULES (from the Rules
+       tab) into this box instead of the web app's firebaseConfig. */
+    const looksLikeRules = (raw) =>
+      /rules_version|service\s+cloud\.firestore|allow\s+read,\s*write/i.test(raw);
 
-    $('#enableBtn', m)?.addEventListener('click', async () => {
-      const cfgText = $('#fbCfg', m).value.trim();
-      const shop = $('#shopId', m).value.trim();
-      if (!cfgText || !shop) { log('Fill in both Config JSON and Shop ID','error'); return; }
+    const showRulesMistake = () => {
+      logHtml(`
+        <div style="padding:10px;background:#fef2f2;border-left:4px solid #ef4444;border-radius:6px;color:#b91c1c;line-height:1.6;font-size:12.5px;">
+          ❌ <b>Wrong block pasted — these are Firestore SECURITY RULES.</b><br>
+          They belong in <b>Firebase Console → Firestore Database → Rules</b> (then click <b>Publish</b>).<br>
+          In THIS box you need the <code>firebaseConfig</code> object containing
+          <code>apiKey</code>, <code>projectId</code>, <code>appId</code> … from
+          <b>Project settings → Your apps → SDK setup and configuration</b>.<br>
+          <button type="button" class="btn btn-primary btn-sm" id="rulesHelpBtn" style="margin-top:8px;">📍 Show me exactly where to find it</button>
+        </div>`);
+      $('#rulesHelpBtn', m)?.addEventListener('click', () => openFirebaseConfigHelp());
+    };
+
+    const readInputs = () => {
+      const raw  = ($('#fbCfg', m)?.value || '').trim();
+      const shop = ($('#shopId', m)?.value || '').trim();
+      if (!raw)  throw new Error('Paste your Firebase config into the box first');
+      if (looksLikeRules(raw)) {
+        const err = new Error('Those are Firestore security rules, not a firebaseConfig object.');
+        err.isRules = true;
+        throw err;
+      }
+      if (!shop) throw new Error('Enter a Shop ID (use the SAME one on every device)');
+
+      // Convenience: if only an "AIza…" API key is pasted, keep the rest of
+      // the saved config and just swap the key.
+      let parsed;
+      if (!raw.includes('{') && /^AIza[0-9A-Za-z_-]{10,}$/.test(raw)) {
+        const old = CLOUD.getConfig();
+        if (!old) throw new Error('No existing config to update — paste the full firebaseConfig object');
+        parsed = Object.assign({}, old, { apiKey: raw });
+      } else {
+        parsed = parseFirebaseConfig(raw);
+      }
+      if (!parsed.apiKey || !parsed.projectId) throw new Error('Invalid config — missing apiKey or projectId');
+      return { parsed, shop };
+    };
+
+    const restartSyncIfOn = async () => {
+      if (CLOUD.isEnabled() && CLOUD.isReady()) await CLOUD.listen();
+    };
+
+    /* Save the key, re-init Firebase with the NEW config, and (optionally)
+       activate sync. Also fixes the old bug where push() ran before
+       setEnabled(true) and therefore silently did nothing. */
+    const saveKey = async (activate) => {
+      let parsed, shop;
+      try { ({ parsed, shop } = readInputs()); }
+      catch (e) { if (e.isRules) showRulesMistake(); else log('❌ ' + e.message, 'error'); return false; }
+
+      const wasOn = CLOUD.isEnabled();
       try {
-        const parsed = parseFirebaseConfig(cfgText);
-        if (!parsed.apiKey || !parsed.projectId) throw new Error('Invalid config — missing apiKey or projectId');
+        log('💾 Saving Firebase key…');
         CLOUD.setConfig(parsed);
         CLOUD.setShopId(shop);
-        log('Connecting to Firebase...');
-        await CLOUD.init();
-        log('Pulling + merging existing cloud data...');
-        await CLOUD.pullAndMerge();
-        log('Pushing merged data (chunked)...');
-        await CLOUD.push();
+        if (activate) CLOUD.setEnabled(true);
+
+        log('🔌 Connecting to project ' + parsed.projectId + '…');
+        await CLOUD.init(true);          // force re-init so the new key is used
+
+        if (activate || wasOn) {
+          let adopted = false;
+          if (!localStorage.getItem(CLOUD.LAST_SYNC_KEY)) {
+            log('🔄 First connection — loading existing shop data…');
+            try { adopted = await CLOUD.adoptCloudIfPresent(); } catch (e) {}
+          }
+          if (!adopted) {
+            log('🔄 Merging existing cloud data…');
+            await CLOUD.pullAndMerge();
+          }
+          log('⬆️ Pushing local data…');
+          await CLOUD.push();
+          CLOUD._initialSyncDone = true;
+          await restartSyncIfOn();
+        }
+        CLOUD._initialSyncDone = true;
+        refreshCloudStatus();
+        if (typeof logAction === 'function') logAction(activate ? 'cloud.enable' : 'cloud.keyChange', parsed.projectId);
+        log('✅ ' + (activate ? 'Cloud Sync is ON' : 'New Firebase key saved') + ' — project ' + parsed.projectId, 'success');
+        if (typeof toast === 'function') toast(activate ? '✅ Cloud Sync enabled' : '✅ Firebase key saved', 'success');
+        setTimeout(() => {
+          closeModal();
+          if (activate) { try { location.reload(); } catch (e) {} }
+          else openCloudSyncManager();
+        }, 1400);
+        return true;
+      } catch (e) {
+        log('❌ ' + (e && e.message ? e.message : String(e)), 'error');
+        return false;
+      }
+    };
+
+    $('#saveCfgBtn', m)?.addEventListener('click', () => saveKey(false));
+    $('#enableBtn',  m)?.addEventListener('click', () => saveKey(true));
+
+    $('#testCfgBtn', m)?.addEventListener('click', async () => {
+      let parsed, shop;
+      try { ({ parsed, shop } = readInputs()); }
+      catch (e) { if (e.isRules) showRulesMistake(); else log('❌ ' + e.message, 'error'); return; }
+      try {
+        log('🔌 Testing connection…');
+        CLOUD.setConfig(parsed);
+        CLOUD.setShopId(shop);
+        const db = await CLOUD.init(true);
+        await db.collection('shops').doc(shop).get();
+        refreshCloudStatus();
+        log('✅ Connected to Firestore — project ' + parsed.projectId + ' is reachable.', 'success');
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        if (/permission|PERMISSION_DENIED|insufficient/i.test(msg)) {
+          logHtml(`
+            <div style="padding:10px;background:#fef2f2;border-left:4px solid #ef4444;border-radius:6px;color:#b91c1c;line-height:1.6;font-size:12.5px;">
+              ❌ <b>Firestore denied the request.</b> Your database rules are still locked
+              (<code>allow read, write: if false;</code>). Paste the rules from the Setup Guide into
+              <b>Firebase Console → Firestore Database → Rules</b>, click <b>Publish</b>, then test again.<br>
+              <button type="button" class="btn btn-primary btn-sm" id="permHelpBtn" style="margin-top:8px;">📖 Open Rules Guide</button>
+            </div>`);
+          $('#permHelpBtn', m)?.addEventListener('click', () => { closeModal(); openFirebaseSetupGuide(); });
+        } else {
+          log('❌ Connection failed: ' + msg + ' — check the key, Firestore rules and your internet connection.', 'error');
+        }
+      } finally {
+        try { await restartSyncIfOn(); } catch (e) {}
+      }
+    });
+
+    $('#clearCfgBtn', m)?.addEventListener('click', () => {
+      confirmDialog('Remove the saved Firebase key and stop Cloud Sync on this device? Your local data is NOT deleted.', () => {
+        CLOUD.setEnabled(false);
+        CLOUD.clearConfig();
+        refreshCloudStatus();
+        if (typeof toast === 'function') toast('Firebase key removed', 'success');
+        setTimeout(() => { closeModal(); openCloudSyncManager(); }, 50);
+      });
+    });
+
+    $('#firebaseGuideBtn', m)?.addEventListener('click', () => { closeModal(); openFirebaseSetupGuide(); });
+    $('#findCfgBtn', m)?.addEventListener('click', () => { closeModal(); openFirebaseConfigHelp(); });
+    $('#resetToBuiltInBtn', m)?.addEventListener('click', () => {
+      confirmDialog('Discard the key saved in this browser and go back to the built-in config?', () => {
+        localStorage.removeItem(CLOUD.CFG_KEY);
+        localStorage.removeItem(CLOUD.SHOP_KEY);
+        localStorage.removeItem(CLOUD.ENABLED_KEY);
+        localStorage.removeItem(CLOUD.LAST_SYNC_KEY);
+        localStorage.removeItem('mrLaundryCloudCfgCleared');
+        CLOUD.setEnabled(false); CLOUD.stop(); CLOUD._resetConnection();
         CLOUD.setEnabled(true);
-        await CLOUD.listen();
-        log('✅ Connected! Real-time sync active.', 'success');
-        if (typeof logAction === 'function') logAction('cloud.enable', shop);
-        setTimeout(() => { closeModal(); location.reload(); }, 1500);
-      } catch(e) { log('❌ ' + e.message, 'error'); }
+        refreshCloudStatus();
+        if (typeof toast === 'function') toast('✅ Back to the built-in config', 'success');
+        setTimeout(() => { closeModal(); openCloudSyncManager(); }, 50);
+      });
+    });
+    $('#restoreCfgBtn', m)?.addEventListener('click', () => {
+      const saved = CLOUD.getConfig();
+      if (!saved) { log('No saved key to restore', 'error'); return; }
+      $('#fbCfg', m).value = JSON.stringify(saved, null, 2);
+      $('#shopId', m).value = CLOUD.getShopId();
+      log('✅ Restored the saved firebaseConfig — you can edit it or click Test Connection.', 'success');
     });
 
     $('#mergeNowBtn', m)?.addEventListener('click', async () => {
-      log('Merging...');
+      log('Merging…');
       try {
         await CLOUD.pullAndMerge();
         await CLOUD.push();
-        log('✅ Merge complete. Reloading...','success');
-        setTimeout(() => location.reload(), 1000);
-      } catch(e) { log('❌ ' + e.message, 'error'); }
+        log('✅ Merge complete. Reloading…', 'success');
+        setTimeout(() => { try { location.reload(); } catch (e) {} }, 1000);
+      } catch (e) { log('❌ ' + e.message, 'error'); }
     });
 
     $('#pushNowBtn', m)?.addEventListener('click', async () => {
-      log('Pushing (chunked)...');
-      try { await CLOUD.push(); log('✅ Pushed to cloud','success'); }
-      catch(e) { log('❌ ' + e.message, 'error'); }
+      log('Pushing (chunked)…');
+      try { await CLOUD.push(); log('✅ Pushed to cloud', 'success'); }
+      catch (e) { log('❌ ' + e.message, 'error'); }
     });
 
     $('#pullNowBtn', m)?.addEventListener('click', () => {
       confirmDialog('FORCE Pull will OVERWRITE local data with cloud. You probably want "Merge Now" instead. Continue?', async () => {
         try {
           const remote = await CLOUD.pull();
-          if (!remote) { log('No data in cloud yet','error'); return; }
+          if (!remote) { log('No data in cloud yet', 'error'); return; }
           DB._data = remote; DB.save();
-          toast('Pulled from cloud. Reloading...','success');
-          setTimeout(() => location.reload(), 1000);
-        } catch(e) { log('❌ ' + e.message, 'error'); }
+          if (typeof toast === 'function') toast('Pulled from cloud. Reloading…', 'success');
+          setTimeout(() => { try { location.reload(); } catch (e) {} }, 1000);
+        } catch (e) { log('❌ ' + e.message, 'error'); }
       });
     });
 
     $('#disableBtn', m)?.addEventListener('click', () => {
       CLOUD.setEnabled(false); CLOUD.stop();
-      toast('Cloud sync paused','success');
+      refreshCloudStatus();
+      if (typeof toast === 'function') toast('Cloud sync paused', 'success');
       closeModal(); openCloudSyncManager();
     });
   }});
 }
 
-function openFirebaseSetupGuide() {
-  openModal(`
-    <h3>📖 Firebase Setup Guide (One-Time, ~5 min)</h3>
-    <p class="sub">Firebase gives you a free real-time database for syncing across devices.</p>
-
-    <ol style="font-size:13px;line-height:1.8;padding-left:20px;">
-      <li>Go to <a href="https://console.firebase.google.com/" target="_blank"><b>console.firebase.google.com</b></a> → sign in with Gmail</li>
-      <li>Click <b>"Add project"</b> → name it <b>"Laundry POS POS"</b> → continue</li>
-      <li>On the project home page, click the <b>Web icon</b> <code>&lt;/&gt;</code> to add a web app</li>
-      <li>Left menu → <b>Build</b> → <b>Firestore Database</b> → <b>Create database</b></li>
-      <li>Go to <b>Rules</b> tab and replace with:
-        <pre style="background:#1e293b;color:#fff;padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;">rules_version = '2';
+const FIRESTORE_RULES = `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /shops/{shopId} {
@@ -619,17 +937,130 @@ service cloud.firestore {
       allow read, write: if true;
     }
   }
-}</pre>
-        <small style="color:var(--danger);"><b>⚠️ IMPORTANT:</b> The rules MUST include the <code>/tables/{tableId}</code> path or chunked sync won't work!</small>
-      </li>
-      <li>Click <b>Publish</b></li>
-      <li>Paste the <code>firebaseConfig</code> in the box above</li>
-      <li>Choose any <b>Shop ID</b> — use the SAME on all devices</li>
-      <li>Click <b>"Enable Cloud Sync"</b> ✅</li>
+}`;
+
+/* A ready-to-edit config object, pre-filled with whatever we already know. */
+function firebaseConfigTemplate() {
+  const c = CLOUD.getConfig() || {};
+  const pid = c.projectId || 'YOUR_PROJECT_ID';
+  return JSON.stringify({
+    apiKey:            c.apiKey            || 'PASTE_YOUR_API_KEY_HERE',
+    authDomain:        c.authDomain        || pid + '.firebaseapp.com',
+    projectId:         pid,
+    storageBucket:     c.storageBucket     || pid + '.firebasestorage.app',
+    messagingSenderId: c.messagingSenderId || 'YOUR_SENDER_ID',
+    appId:             c.appId             || 'YOUR_APP_ID'
+  }, null, 2);
+}
+
+function copyTextFallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  ta.remove();
+}
+
+/* Focused help for the #1 mistake: pasting Firestore rules instead of the
+   web app's firebaseConfig. */
+function openFirebaseConfigHelp() {
+  const cfg = CLOUD.getConfig() || {};
+  const esc = (typeof escapeHtml === 'function') ? escapeHtml : (v) => String(v == null ? '' : v);
+  openModal(`
+    <h3>📍 Where do I find <code>firebaseConfig</code>?</h3>
+
+    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 12px;border-radius:8px;color:#b91c1c;font-size:13px;line-height:1.6;margin-bottom:14px;">
+      ⚠️ <b>Two different things — don't mix them up:</b><br>
+      • <b>Firestore security rules</b> (<code>rules_version = '2'; service cloud.firestore …</code>)
+        → paste in the <b>Firebase Console → Rules</b> tab.<br>
+      • <b>firebaseConfig</b> (<code>{ "apiKey": …, "projectId": … }</code>)
+        → paste in <b>this app's</b> config box.
+    </div>
+
+    <p style="font-size:13px;font-weight:700;margin-bottom:6px;">Get it here:</p>
+    <ol style="font-size:13px;line-height:1.9;padding-left:20px;margin-bottom:14px;">
+      <li>Open <a href="https://console.firebase.google.com/" target="_blank"><b>console.firebase.google.com</b></a> and select your project${cfg.projectId ? ' (<b>' + esc(cfg.projectId) + '</b>)' : ''}</li>
+      <li>Click the <b>⚙️ gear</b> at top-left → <b>Project settings</b></li>
+      <li>On the <b>General</b> tab, scroll to <b>Your apps</b></li>
+      <li>If there is no Web app yet, click the <b><code>&lt;/&gt;</code></b> icon to add one (no hosting needed)</li>
+      <li>Under <b>SDK setup and configuration</b>, choose <b>Config</b> (not "npm")</li>
+      <li>Copy the whole <code>const firebaseConfig = { … };</code> block and paste it into the app's config box</li>
     </ol>
 
-    <div class="modal-footer">
-      <button class="btn btn-primary" onclick="closeModal();openCloudSyncManager()">← Back to Setup</button>
+    <p style="font-size:13px;font-weight:700;margin-bottom:6px;">It looks like this:</p>
+    <pre id="cfgExample" style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;font-size:11.5px;overflow-x:auto;margin-bottom:8px;">${esc(firebaseConfigTemplate())}</pre>
+    <p style="font-size:12px;color:var(--text-soft);line-height:1.6;margin-bottom:14px;">
+      Replace <code>PASTE_YOUR_API_KEY_HERE</code> etc. with the values from the console.
+      If a key is already saved, the template above is pre-filled with it — just edit what you want to change.
+    </p>
+
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px;">
+      <button type="button" class="btn btn-ghost" onclick="closeModal();openCloudSyncManager()">← Back to Cloud Sync</button>
+      <button type="button" class="btn btn-secondary" id="copyCfgExample">📋 Copy example</button>
+      <button type="button" class="btn btn-primary" id="useCfgExample">✏️ Put this in the config box</button>
     </div>
-  `, { large: true });
+  `, { large: true, onOpen(m) {
+    $('#copyCfgExample', m)?.addEventListener('click', async () => {
+      const txt = $('#cfgExample', m).textContent;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(txt);
+        else copyTextFallback(txt);
+        if (typeof toast === 'function') toast('Example copied', 'success');
+      } catch (e) { copyTextFallback(txt); }
+    });
+    $('#useCfgExample', m)?.addEventListener('click', () => openCloudSyncManager(firebaseConfigTemplate()));
+  }});
+}
+
+function openFirebaseSetupGuide() {
+  const esc = (typeof escapeHtml === 'function') ? escapeHtml : (v) => String(v == null ? '' : v);
+  openModal(`
+    <h3>📖 Firebase Setup Guide (One-Time, ~5 min)</h3>
+    <p class="sub">Two separate blocks go in two separate places. The most common mistake is swapping them.</p>
+
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="font-weight:800;color:#1d4ed8;margin-bottom:6px;">A) IN THE FIREBASE CONSOLE — Firestore security rules</div>
+      <ol style="font-size:13px;line-height:1.8;padding-left:20px;margin-bottom:10px;">
+        <li>Go to <a href="https://console.firebase.google.com/" target="_blank"><b>console.firebase.google.com</b></a> → your project</li>
+        <li>Left menu → <b>Build</b> → <b>Firestore Database</b> → <b>Create database</b> (if not created yet)</li>
+        <li>Open the <b>Rules</b> tab. The default <code>allow read, write: if false;</code> <b>blocks all sync</b> — replace it with the block below</li>
+        <li>Click <b>Publish</b> and wait ~30 seconds</li>
+      </ol>
+      <pre id="rulesExample" style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;font-size:11.5px;overflow-x:auto;margin-bottom:8px;">${esc(FIRESTORE_RULES)}</pre>
+      <small style="color:#b91c1c;display:block;line-height:1.6;margin-bottom:8px;">
+        ⚠️ The <code>/tables/{tableId}</code> path is REQUIRED — the app stores each table in its own document.
+        These "allow if true" rules are open/test-mode rules: anyone with your project ID could read the data.
+        For production, restrict them to your Shop ID and/or add Firebase Authentication.
+      </small>
+      <button type="button" class="btn btn-secondary btn-sm" id="copyRulesBtn">📋 Copy rules</button>
+      <span style="font-size:11.5px;color:#1d4ed8;margin-left:8px;">→ paste in the Firebase Console Rules tab, NOT in this app</span>
+    </div>
+
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="font-weight:800;color:#15803d;margin-bottom:6px;">B) IN THIS APP — firebaseConfig (your key)</div>
+      <ol style="font-size:13px;line-height:1.8;padding-left:20px;margin-bottom:10px;">
+        <li>Firebase Console → <b>⚙️ Project settings</b> → <b>General</b> → <b>Your apps</b></li>
+        <li>Under <b>SDK setup and configuration</b> pick <b>Config</b>, copy the <code>const firebaseConfig = { … };</code> block</li>
+        <li>Paste it into the <b>Firebase Config / API Key</b> box in Cloud Sync settings (NOT the rules!)</li>
+        <li>Set a <b>Shop ID</b> — use the SAME on every device</li>
+        <li>Click <b>🔌 Test Connection</b>, then <b>✅ Save &amp; Enable Cloud Sync</b></li>
+      </ol>
+      <button type="button" class="btn btn-secondary btn-sm" id="guideFindCfgBtn">📍 Show me where to find firebaseConfig</button>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-primary" onclick="closeModal();openCloudSyncManager()">← Back to Cloud Sync</button>
+    </div>
+  `, { large: true, onOpen(m) {
+    $('#copyRulesBtn', m)?.addEventListener('click', async () => {
+      const txt = $('#rulesExample', m).textContent;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(txt);
+        else copyTextFallback(txt);
+        if (typeof toast === 'function') toast('Rules copied — paste into Firebase Console → Rules', 'success');
+      } catch (e) { copyTextFallback(txt); }
+    });
+    $('#guideFindCfgBtn', m)?.addEventListener('click', () => { closeModal(); openFirebaseConfigHelp(); });
+  }});
 }

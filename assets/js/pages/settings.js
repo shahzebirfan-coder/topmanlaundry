@@ -162,17 +162,12 @@ function renderSettings() {
         </div>
 
         <div class="card" style="margin-bottom:20px;">
-          <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">Real-time sync via Firebase. Premium feature. Contact IT Department to enable.</p>
-          <button class="btn btn-primary btn-block" id="openCloudBtn">🔄 Configure Cloud Sync (IT Admin)</button>
-          <div id="cloudStatus" style="font-size:11px;color:var(--text-soft);margin-top:8px;text-align:center;"></div>
-        </div>
-
-        
-        <div class="card" style="margin-bottom:20px;">
           <div class="card-header"><h3>🔄 Cloud Sync (Multi-Device)</h3></div>
-          <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">Real-time sync via Firebase. Premium feature. Contact IT Department to enable.</p>
-          <button class="btn btn-primary btn-block" id="openCloudBtn">🔄 Configure Cloud Sync (IT Admin)</button>
-          <div id="cloudStatus" style="font-size:11px;color:var(--text-soft);margin-top:8px;text-align:center;"></div>
+          <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">
+            Real-time sync via Firebase. Click below to add a new Firebase key, replace the existing one, or turn sync on/off.
+          </p>
+          <button type="button" class="btn btn-primary btn-block" data-action="open-cloud-sync" id="openCloudBtn">🔑 Configure Cloud Sync / Replace Firebase Key</button>
+          <div class="cloud-status" id="cloudStatus" style="font-size:11px;color:var(--text-soft);margin-top:8px;text-align:center;"></div>
         </div>
 
         <div class="card" style="margin-bottom:20px;">
@@ -302,13 +297,24 @@ function renderSettings() {
     });
   };
   if ($('#openMasterCodeBtn')) $('#openMasterCodeBtn').onclick = () => openMasterCodeSetup();
-  if ($('#openCloudBtn')) $('#openCloudBtn').onclick  = () => {
-    promptPasswordModal('Access Cloud Sync Settings', (pwd) => {
-      let itPwd = window._IT_BRAND.pwd;
-      if (pwd === itPwd) openCloudSyncManager();
-      else toast('Incorrect IT ADMIN Password!', 'error');
+  /* Cloud Sync — bind EVERY matching button.
+     Previously two cards shared id="openCloudBtn"; querySelector() wired only
+     the FIRST one, so the visible "Cloud Sync (Multi-Device)" button was dead. */
+  document.querySelectorAll('[data-action="open-cloud-sync"], #openCloudBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (typeof openCloudSyncManager !== 'function') {
+        toast('Cloud Sync module did not load — hard-refresh (Ctrl+F5)', 'error');
+        return;
+      }
+      const itPwd = (window._IT_BRAND && window._IT_BRAND.pwd) || '';
+      // If the IT core failed to load, don't lock the owner out of their own config.
+      if (!itPwd) { openCloudSyncManager(); return; }
+      promptPasswordModal('Access Cloud Sync Settings', (pwd) => {
+        if (pwd === itPwd) openCloudSyncManager();
+        else toast('Incorrect IT ADMIN Password!', 'error');
+      });
     });
-  };
+  });
   if ($('#openSubBtnTop')) $('#openSubBtnTop').onclick = () => openSubscriptionManager();
   // Status indicators
   const gdEl = $('#gdriveStatus');
@@ -318,12 +324,13 @@ function renderSettings() {
       gdEl.innerHTML = `✅ Connected${last?' • Last backup: '+new Date(last).toLocaleString():''}`;
     } else gdEl.innerHTML = GDRIVE.getClientId() ? '⚠️ Configured but not connected' : '❌ Not set up';
   }
-  const cEl = $('#cloudStatus');
-  if (cEl) {
-    if (CLOUD.isEnabled() && CLOUD.isReady()) {
-      const last = localStorage.getItem(CLOUD.LAST_SYNC_KEY);
-      cEl.innerHTML = `✅ Active • Shop ID: <b>${CLOUD.getShopId()}</b>${last?' • Last sync: '+new Date(last).toLocaleString():''}`;
-    } else cEl.innerHTML = CLOUD.getConfig() ? '⏸️ Configured but paused' : '❌ Not set up';
+  // Refresh every cloud status element (not just the first duplicate).
+  if (typeof refreshCloudStatus === 'function') refreshCloudStatus();
+  else {
+    const txt = (typeof CLOUD !== 'undefined' && CLOUD.isEnabled() && CLOUD.isReady())
+      ? `✅ Active • Shop ID: <b>${CLOUD.getShopId()}</b>`
+      : ((typeof CLOUD !== 'undefined' && CLOUD.getConfig()) ? '⏸️ Key saved — sync paused' : '❌ No Firebase key set');
+    document.querySelectorAll('.cloud-status, #cloudStatus').forEach(el => el.innerHTML = txt);
   }
 
   $('#importFile').onchange = (e) => {

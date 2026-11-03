@@ -40,9 +40,11 @@
     </div>
   </div>
 
+  <!-- Built-in Firebase config + Shop ID (shared by every page) -->
+  <script src="assets/js/cloud-autoconfig.js?v=20261104.1"></script>
   <script src="assets/js/db.js"></script>
   <script src="assets/js/utils.js"></script>
-  <script src="assets/js/cloudsync.js"></script>
+  <script src="assets/js/cloudsync.js?v=20261104.1"></script>
   <script>
     const s = DB.settings();
     document.getElementById('shopName').textContent = s.shopName || 'Laundry POS';

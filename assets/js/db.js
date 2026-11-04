@@ -6,6 +6,18 @@
 const DB_KEY = 'mrLaundryDB';
 const SESSION_KEY = 'mrLaundrySession';
 
+/* Every number series starts here. Counters must never move backwards. */
+const COUNTER_DEFAULTS = { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000, expense: 1000 };
+
+/* Pull the trailing numeric part out of a document number.
+   Handles 5241, "5241", "INV-5241", "EXP/2026/5241", "MRL-1234", "PO-77". */
+function parseSeriesNumber(value) {
+  if (value == null) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.trunc(value) : 0;
+  const m = String(value).match(/(\d+)\s*$/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 const DB = {
   _data: null,
 
@@ -14,9 +26,16 @@ const DB = {
     if (raw) {
       try { this._data = JSON.parse(raw); }
       catch(e){ this._data = this._seed(); this.save(); }
-      // Migration: ensure new top-level tables exist
+      if (!this._data || typeof this._data !== 'object' || Array.isArray(this._data)) {
+        this._data = this._seed(); this.save();
+      }
+      // Migration: ensure every top-level table exists (old/partial backups)
       const seed = this._seed();
-    const now = '2024-01-01T00:00:00.000Z'; // Fixed date so remote data always overwrites local defaults on a fresh device!
+      for (const k of Object.keys(seed)) {
+        if (this._data[k] == null) {
+          this._data[k] = Array.isArray(seed[k]) ? seed[k].slice() : Object.assign({}, seed[k]);
+        }
+      }
       // Ensure default Hanger & Shopper inventory items exist (auto-add if missing)
       const inv = this._data.inventory;
       if (!inv.find(i => i.autoDeduct === 'hanger')) {
@@ -33,31 +52,33 @@ const DB = {
           this._data.settings[k] = seed.settings[k];
         }
       });
-      this._data._counters = this._data._counters || { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000 };
+      // Reconcile ALL number series from the actual records on every load.
+      // This is the safety net for old/partial backups and cloud merges.
+      this.normalizeCounters();
+      this.normalizeRecords();
       if (!this._data.branches || !this._data.branches.length) {
         this._data.branches = [{ id: 'main', name: 'Main Branch', address: '', phone: '', color: '#4f7cff', isActive: true, createdAt: '2024-01-01T00:00:00.000Z' }];
       }
       
       
-      // Client Migration: Update credentials
-      if (this._data.users) {
-        let adminUser = this._data.users.find(u => u.username === 'demo' || u.role === 'admin');
-        if (adminUser && typeof CLIENT_CONFIG !== 'undefined') {
-          adminUser.username = CLIENT_CONFIG.adminUsername;
-          adminUser.password = CLIENT_CONFIG.adminPassword;
-          adminUser.name = CLIENT_CONFIG.adminName;
+      /* Client bootstrap runs ONCE and only on an untouched default install.
+         Previously this reset the admin username/password on EVERY page load,
+         which broke the login ID a client had set himself or restored from a
+         backup. Fresh installs already get these values from _seed(). */
+      if (!this._data._clientBootstrapDone) {
+        if (Array.isArray(this._data.users) && typeof CLIENT_CONFIG !== 'undefined') {
+          const untouched = this._data.users.find(u =>
+            u.role === 'admin' && u.username === 'demo' && u.password === '123456');
+          if (untouched) {
+            untouched.username = CLIENT_CONFIG.adminUsername;
+            untouched.password = CLIENT_CONFIG.adminPassword;
+            untouched.name     = CLIENT_CONFIG.adminName;
+          }
         }
-      }
-      if (this._data.settings && (this._data.settings.shopName === 'Laundry POS' || this._data.settings.shopName === 'Mr Laundry')) {
-        this._data.settings.shopName = typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.shopName : 'Laundry POS';
-        this._data.settings.tagline = typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.tagline : '';
-        this._data.settings.phone = typeof CLIENT_CONFIG !== 'undefined' ? (CLIENT_CONFIG.phone || '') : '';
-        this._data.settings.address = typeof CLIENT_CONFIG !== 'undefined' ? (CLIENT_CONFIG.address || '') : '';
-        this._data.settings.facebook = typeof CLIENT_CONFIG !== 'undefined' ? (CLIENT_CONFIG.facebook || '') : '';
+        this._data._clientBootstrapDone = 1;
+        this.save();
       }
 
-      if (this._data._counters.po == null) this._data._counters.po = 1000;
-      if (this._data._counters.expense == null) this._data._counters.expense = 1000;
 
       // Expense categories became editable — seed the table for older installs
       if (!Array.isArray(this._data.expenseCategories) || !this._data.expenseCategories.length) {
@@ -285,53 +306,90 @@ const DB = {
     return true;
   },
 
-  nextLoyaltyNumber() {
-    if (!this._data._counters) this._data._counters = { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000 };
-    this._data._counters.loyalty += 1;
-    this.save();
-    const prefix = (this._data.settings.loyaltyPrefix || 'MRL').toUpperCase();
-    return `${prefix}-${this._data._counters.loyalty}`;
+  /* Older / partial backups can miss fields the UI dereferences directly
+     (e.g. order.createdAt.slice(...)). Fill them with harmless defaults so a
+     restore never breaks the Dashboard, Reports or Orders pages. A fixed old
+     date is used so restored orders do NOT inflate "today's" sales. */
+  normalizeRecords() {
+    const OLD = '2024-01-01T00:00:00.000Z';
+    const tables = ['orders','customers','expenses','claims','vouchers','purchaseOrders','refunds'];
+    for (const t of tables) {
+      const rows = this._data[t];
+      if (!Array.isArray(rows)) continue;
+      rows.forEach((r, i) => {
+        if (!r || typeof r !== 'object') return;
+        if (!r.id) r.id = `${t}_${i}_${Date.now().toString(36)}`;
+        if (t === 'orders' && typeof r.createdAt !== 'string') r.createdAt = OLD;
+        if (t === 'expenses' && typeof r.date !== 'string') r.date = OLD.slice(0, 10);
+      });
+    }
   },
-  
-  nextInvoiceNumber() {
-    if (!this._data._counters) this._data._counters = { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000 };
-    
-    // Find highest existing invoice number in orders array to prevent ANY duplication
-    let maxExisting = 1000;
-    if (this._data.orders && this._data.orders.length > 0) {
-      for (let o of this._data.orders) {
-        if (o.invoiceNo && !isNaN(o.invoiceNo) && parseInt(o.invoiceNo) > maxExisting) {
-          maxExisting = parseInt(o.invoiceNo);
+
+  /* Raise every counter to at least the highest number already used in the
+     data. Called on load, on backup import, on cloud merge and before each
+     invoice. Counters are monotonic — they can never go backwards. */
+  normalizeCounters() {
+    const d = this._data;
+    d._counters = Object.assign({}, COUNTER_DEFAULTS, d._counters || {});
+    for (const k of Object.keys(d._counters)) {
+      const n = Number(d._counters[k]);
+      d._counters[k] = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : (COUNTER_DEFAULTS[k] || 1000);
+    }
+    const scan = (table, fields, key) => {
+      const rows = Array.isArray(d[table]) ? d[table] : [];
+      for (const r of rows) {
+        if (!r || typeof r !== 'object') continue;
+        for (const f of fields) {
+          const n = parseSeriesNumber(r[f]);
+          if (n > d._counters[key]) d._counters[key] = n;
         }
       }
-    }
-    
-    let nextVal = Math.max(this._data._counters.invoice || 1000, maxExisting) + 1;
-    this._data._counters.invoice = nextVal;
+    };
+    scan('orders',         ['invoiceNo'],  'invoice');
+    scan('refunds',        ['invoiceNo'],  'invoice');
+    scan('customers',      ['loyaltyNo'],  'loyalty');
+    scan('claims',         ['claimNo'],    'claim');
+    scan('vouchers',       ['voucherNo'],  'voucher');
+    scan('purchaseOrders', ['poNo'],       'po');
+    scan('expenses',       ['refNo'],      'expense');
+    return d._counters;
+  },
+
+  _nextCounter(key) {
+    if (!this._data._counters) this._data._counters = Object.assign({}, COUNTER_DEFAULTS);
+    const n = Number(this._data._counters[key]);
+    const next = (Number.isFinite(n) ? Math.max(n, COUNTER_DEFAULTS[key] || 1000) : (COUNTER_DEFAULTS[key] || 1000)) + 1;
+    this._data._counters[key] = next;
     this.save();
-    return nextVal;
+    return next;
+  },
+
+  nextLoyaltyNumber() {
+    const prefix = (this._data.settings?.loyaltyPrefix || 'MRL').toUpperCase();
+    return `${prefix}-${this._nextCounter('loyalty')}`;
+  },
+
+  nextInvoiceNumber() {
+    // Re-scan real records first: a stale/low counter in a restored backup can
+    // never make the next invoice smaller than an invoice that already exists.
+    this.normalizeCounters();
+    const next = Math.max(this._data._counters.invoice, COUNTER_DEFAULTS.invoice) + 1;
+    this._data._counters.invoice = next;
+    this.save();
+    return next;
   },
 
   nextClaimNumber() {
-    if (!this._data._counters) this._data._counters = { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000 };
-    this._data._counters.claim = (this._data._counters.claim || 1000) + 1;
-    this.save();
-    const prefix = (this._data.settings.claimPrefix || 'CLM').toUpperCase();
-    return `${prefix}-${this._data._counters.claim}`;
+    const prefix = (this._data.settings?.claimPrefix || 'CLM').toUpperCase();
+    return `${prefix}-${this._nextCounter('claim')}`;
   },
   nextVoucherNumber() {
-    if (!this._data._counters) this._data._counters = { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000 };
-    this._data._counters.voucher = (this._data._counters.voucher || 1000) + 1;
-    this.save();
-    const prefix = (this._data.settings.voucherPrefix || 'VCH').toUpperCase();
-    return `${prefix}-${this._data._counters.voucher}`;
+    const prefix = (this._data.settings?.voucherPrefix || 'VCH').toUpperCase();
+    return `${prefix}-${this._nextCounter('voucher')}`;
   },
   nextPONumber() {
-    if (!this._data._counters) this._data._counters = { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000 };
-    this._data._counters.po = (this._data._counters.po || 1000) + 1;
-    this.save();
-    const prefix = (this._data.settings.poPrefix || 'PO').toUpperCase();
-    return `${prefix}-${this._data._counters.po}`;
+    const prefix = (this._data.settings?.poPrefix || 'PO').toUpperCase();
+    return `${prefix}-${this._nextCounter('po')}`;
   },
 
   settings() { return this._data.settings; },
@@ -406,9 +464,41 @@ const DB = {
   },
 
   exportJSON() { return JSON.stringify(this._data, null, 2); },
+
+  /* Restore a backup SAFELY: validate it, fill any missing tables, reconcile
+     all number series, then tell Cloud Sync that this device is authoritative. */
   importJSON(json) {
-    const parsed = typeof json === 'string' ? JSON.parse(json) : json;
-    this._data = parsed; this.save();
+    let parsed = typeof json === 'string' ? JSON.parse(json) : json;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Invalid backup file');
+    }
+    if (!Array.isArray(parsed.orders) && !Array.isArray(parsed.users) && !parsed.settings) {
+      throw new Error('This file does not look like a Laundry POS backup');
+    }
+
+    const seed = this._seed();
+    for (const k of Object.keys(seed)) {
+      if (parsed[k] == null) parsed[k] = Array.isArray(seed[k]) ? [] : Object.assign({}, seed[k]);
+    }
+    parsed.settings = Object.assign({}, seed.settings, parsed.settings || {});
+
+    this._data = parsed;
+    this.normalizeRecords();
+    this.normalizeCounters();
+    this._data._importedAt = new Date().toISOString();
+    this.save();
+
+    // Cloud Sync must publish this backup, not pull older cloud data over it.
+    if (typeof CLOUD !== 'undefined' && typeof CLOUD.onLocalImport === 'function') {
+      try { CLOUD.onLocalImport(); } catch (e) {}
+    }
+
+    return {
+      orders:    (this._data.orders || []).length,
+      customers: (this._data.customers || []).length,
+      users:     (this._data.users || []).length,
+      nextInvoice: this._data._counters.invoice + 1
+    };
   }
 };
 

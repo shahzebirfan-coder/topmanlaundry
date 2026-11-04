@@ -218,6 +218,11 @@ function renderSettings() {
               📤 Restore from Backup
               <input type="file" id="importFile" accept="application/json" style="display:none;"/>
             </label>
+            <button class="btn btn-secondary" id="auditInvoiceBtn">🔢 Check Invoice Number Sequence</button>
+            <small style="color:var(--text-soft);font-size:11px;line-height:1.5;">
+              Restores keep invoice numbers continuous — the next invoice is always higher than the
+              highest one in the backup. Use this button to verify at any time.
+            </small>
             <hr style="margin:8px 0;border:none;border-top:1px solid var(--border);"/>
             <button class="btn btn-danger" id="resetBtn">⚠️ Reset All Data</button>
           </div>
@@ -283,6 +288,7 @@ function renderSettings() {
   };
 
   $('#exportBtn').onclick = doBackup;
+  if ($('#auditInvoiceBtn')) $('#auditInvoiceBtn').onclick = () => openInvoiceNumberAudit();
   $('#openInvCustBtn').onclick = () => openInvoiceCustomizer();
   if ($('#openPortalCfg')) $('#openPortalCfg').onclick = () => openPortalConfigDialog();
   if ($('#openQRBtn')) $('#openQRBtn').onclick = () => openQRMenuPoster();
@@ -337,9 +343,13 @@ function renderSettings() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      confirmDialog('This will REPLACE all current data with the backup. Continue?', () => {
-        try { DB.importJSON(reader.result); toast('Restored! Reloading...','success'); setTimeout(()=>location.reload(), 800); }
-        catch(err){ toast('Invalid backup file','error'); }
+      confirmDialog('This will REPLACE all current data with the backup. Invoice, loyalty, claim, voucher, PO and expense numbers will continue from the highest number in the backup (they cannot go backwards). Note: if the backup\'s subscription has expired, POS will be read-only until a licence is granted in Settings → Subscription. Continue?', () => {
+        try {
+          const info = DB.importJSON(reader.result);
+          toast(`✅ Restored ${info.orders} orders • next invoice INV-${info.nextInvoice}`, 'success');
+          setTimeout(() => { try { location.reload(); } catch (e) {} }, 1200);
+        }
+        catch (err) { toast('❌ ' + (err && err.message ? err.message : 'Invalid backup file'), 'error'); }
       });
     };
     reader.readAsText(file);
@@ -603,4 +613,60 @@ function afterLicenseChange(st) {
   if (st && (st.kind === 'expired' || st.kind === 'missing')) {
     setTimeout(() => toast('⚠️ Licence is not active — POS is blocked', 'error'), 600);
   }
+}
+
+
+/* ============================================================
+   INVOICE NUMBER AUDIT — lets the owner verify a restored backup
+   before the shop starts billing again.
+   ============================================================ */
+function openInvoiceNumberAudit() {
+  const counters = DB.normalizeCounters();
+  DB.save();
+  const all = Array.isArray(DB._data.orders) ? DB._data.orders : [];
+  const live = all.filter(o => o && !o._deleted);
+  const pairs = live
+    .map(o => ({ id: o.id, raw: o.invoiceNo, n: parseSeriesNumber(o.invoiceNo) }))
+    .filter(x => x.raw != null && x.raw !== '');
+  const valid = pairs.filter(x => x.n > 0);
+  const counts = {};
+  valid.forEach(x => { counts[x.n] = (counts[x.n] || 0) + 1; });
+  const dupes = Object.keys(counts).filter(k => counts[k] > 1).map(Number).sort((a, b) => a - b);
+  const nums = valid.map(x => x.n);
+  const min = nums.length ? Math.min(...nums) : 0;
+  const max = nums.length ? Math.max(...nums) : 0;
+  const next = counters.invoice + 1;
+  const withoutNum = live.length - pairs.length;
+  const ok = dupes.length === 0 && next > max;
+
+  openModal(`
+    <h3>🔢 Invoice Number Health Check</h3>
+    <div style="background:${ok ? '#dcfce7' : '#fef2f2'};border:1px solid ${ok ? '#86efac' : '#fecaca'};padding:12px;border-radius:8px;margin-bottom:14px;font-weight:700;color:${ok ? '#15803d' : '#b91c1c'};">
+      ${ok ? '✅ All good — no duplicates and numbering continues forward.' : '⚠️ Problem detected — review the details below.'}
+    </div>
+    <div style="background:var(--surface-alt);padding:12px;border-radius:8px;font-size:13px;line-height:1.9;margin-bottom:14px;">
+      <b>Orders:</b> ${live.length} ${withoutNum ? `(⚠️ ${withoutNum} without an invoice number)` : ''}<br>
+      <b>First invoice:</b> ${min ? 'INV-' + min : '—'} &nbsp;•&nbsp; <b>Highest invoice:</b> ${max ? 'INV-' + max : '—'}<br>
+      <b>Saved counter:</b> ${counters.invoice}<br>
+      <b>Next invoice will be:</b> <span style="font-size:16px;color:#1d4ed8;font-weight:900;">INV-${next}</span><br>
+      <b>Duplicate numbers found:</b> ${dupes.length}
+      ${dupes.length ? `<div style="font-size:12px;color:#b91c1c;max-height:100px;overflow:auto;">${dupes.slice(0, 30).map(n => 'INV-' + n).join(', ')}</div>` : ''}
+    </div>
+    <p style="font-size:12px;color:var(--text-soft);line-height:1.6;margin-bottom:14px;">
+      The counter is automatically raised to the highest number ever used, including deleted
+      orders and numbers found in other series (claims, POs, vouchers, loyalty cards, expenses).
+      It can therefore never move backwards after a backup restore or a cloud sync.
+    </p>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button>
+      <button type="button" class="btn btn-primary" id="fixCountersBtn">🔧 Re-check &amp; Fix Counters</button>
+    </div>
+  `, { onOpen(m) {
+    const b = m.querySelector('#fixCountersBtn');
+    if (b) b.onclick = () => {
+      DB.normalizeCounters(); DB.save();
+      toast('✅ All number counters reconciled', 'success');
+      closeModal(); openInvoiceNumberAudit();
+    };
+  }});
 }

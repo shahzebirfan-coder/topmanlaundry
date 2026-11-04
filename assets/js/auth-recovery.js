@@ -432,8 +432,9 @@ function openBackupRecovery() {
       if (!parsedData) return;
       if (!confirm('REPLACE all data on this device with backup file? This cannot be undone (but you can re-import).\n\nClick OK to proceed.')) return;
       try {
-        DB._data = parsedData;
-        DB.save();
+        // Use the hardened importer so counters, schema and cloud sync are
+        // all reconciled (a raw assignment would skip every safety check).
+        DB.importJSON(parsedData);
         try {
           DB._data.auditLog = DB._data.auditLog || [];
           DB._data.auditLog.push({

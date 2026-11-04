@@ -163,6 +163,17 @@ const CLOUD = {
   setEnabled(v) { localStorage.setItem(this.ENABLED_KEY, v?'true':'false'); },
   isReady() { return !!(this.getConfig() && this.getShopId()); },
 
+  /* Called by DB.importJSON(): after a backup restore this device holds the
+     correct data. Mark it so the initial cloud bootstrap PUSHES the backup
+     instead of pulling older cloud records back over it. */
+  onLocalImport() {
+    localStorage.setItem(this.LAST_SYNC_KEY, new Date().toISOString());
+    localStorage.setItem('mrLaundryImportBaseline', new Date().toISOString());
+    this._initialSyncDone = true;
+    this._lastPushedJson = {};
+    this._lastPushedMeta = null;
+  },
+
   async loadSDK() {
     if (window.firebase?.firestore) return;
     const scripts = [
@@ -373,6 +384,7 @@ const CLOUD = {
 
     const merged = this.mergeData(DB._data, remoteData);
     DB._data = merged;
+    try { DB.normalizeCounters(); } catch (e) {}
     this._suppressPush = true;
     try { DB.save(); } finally { this._suppressPush = false; }
     this._lastAppliedVersion = meta.version || Date.now();
@@ -471,6 +483,19 @@ const CLOUD = {
     if (CLOUD.isEnabled() && CLOUD.isReady()) {
       try {
         await CLOUD.init();
+        /* A backup was just restored → this device is the source of truth.
+           Publish it to the cloud instead of adopting older cloud data. */
+        if (localStorage.getItem('mrLaundryImportBaseline')) {
+          localStorage.removeItem('mrLaundryImportBaseline');
+          CLOUD._lastPushedJson = {};
+          CLOUD._lastPushedMeta = null;
+          await CLOUD.push();
+          await CLOUD.listen();
+          CLOUD._initialMergeDone = true;
+          CLOUD._initialSyncDone = true;
+          console.log('[Laundry POS] Restored backup published to cloud');
+          return;
+        }
         /* A brand-new device with the built-in config must ADOPT the existing
            cloud data, not push its local demo/seed records over the shop DB. */
         const firstRun = !localStorage.getItem(CLOUD.LAST_SYNC_KEY);
@@ -567,7 +592,10 @@ async function reconnectCloudSync() {
       const rows = DB._data[table] || [];
       const i = rows.findIndex(r => r.id === id);
       if (i === -1) return false;
-      rows[i] = { id, _deleted: true, updatedAt: new Date().toISOString() };
+      // Keep the original fields (esp. invoiceNo / claimNo / poNo) on the
+      // tombstone, otherwise deleting the newest record lets its number be
+      // handed out again after a restore or a cloud merge.
+      rows[i] = Object.assign({}, rows[i], { _deleted: true, updatedAt: new Date().toISOString() });
       DB.save();
       return true;
     };

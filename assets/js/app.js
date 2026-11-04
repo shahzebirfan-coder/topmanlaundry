@@ -150,7 +150,10 @@ function initTrialCheck() {
     // Default 15 days
     let tDays = typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.trialDays : 15;
     s.subscriptionExpiry = s.trialStartDate + (tDays * 24 * 60 * 60 * 1000);
-    DB.saveSettings(s);
+    /* Do NOT use saveSettings() here: it stamps _settingsUpdatedAt = now,
+       which makes this browser's seed settings look NEWER than the cloud's
+       real shop settings and silently discards them during the auto pull. */
+    DB.save();
   }
   
   checkExpiry(true);

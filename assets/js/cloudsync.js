@@ -108,6 +108,14 @@ const CLOUD = {
   _lastAppliedVersion: 0,
   _lastPushedJson: {},
   _toastDebounceTimer: null,
+  /* Zero-touch auto-sync */
+  _initialSyncPromise: null,
+  _resolveInitialSync: null,
+  _lastPullChanged: false,
+  _autoSyncStarted: false,
+  _lastAutoSyncAt: 0,
+  _silentBusy: false,
+  _syncState: 'idle',
 
   getConfig() {
     const raw = localStorage.getItem(this.CFG_KEY);
@@ -172,6 +180,99 @@ const CLOUD = {
     this._initialSyncDone = true;
     this._lastPushedJson = {};
     this._lastPushedMeta = null;
+  },
+
+  /* ============== ZERO-TOUCH AUTO SYNC ==============
+     Goal: simply opening the website is enough. No daily merge / push / pull. */
+  whenInitialSyncDone() {
+    if (this._initialSyncDone) return Promise.resolve();
+    if (!this._initialSyncPromise) {
+      this._initialSyncPromise = new Promise(res => { this._resolveInitialSync = res; });
+    }
+    return this._initialSyncPromise;
+  },
+
+  _finishInitialSync() {
+    this._initialSyncDone = true;
+    this._initialMergeDone = true;
+    this._lastAutoSyncAt = Date.now();
+    if (this._resolveInitialSync) { this._resolveInitialSync(); this._resolveInitialSync = null; }
+    try { this.startAutoSync(); } catch (e) {}
+  },
+
+  /* Small always-visible indicator so the client can SEE that data is fresh. */
+  setStatus(state) {
+    this._syncState = state || 'ok';
+    const el = (typeof document !== 'undefined') ? document.getElementById('cloudSyncPill') : null;
+    if (!el) return;
+    const stamp = this._lastAutoSyncAt
+      ? new Date(this._lastAutoSyncAt).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
+      : '';
+    const map = {
+      syncing: ['☁️ Syncing…',            '#fef3c7', '#92400e'],
+      ok:      ['☁️ Auto-sync ON' + (stamp ? ' · ' + stamp : ''), '#d1fae5', '#065f46'],
+      offline: ['⚠️ Offline — retrying',   '#fee2e2', '#991b1b'],
+      paused:  ['⚠️ Sync paused',          '#fee2e2', '#991b1b']
+    };
+    const [txt, bg, fg] = map[this._syncState] || map.ok;
+    el.textContent = txt;
+    el.style.background = bg;
+    el.style.color = fg;
+    el.title = 'Data automatically syncs on every open. Click for an instant check.';
+  },
+
+  /* Re-render ONLY when the pull really changed data, and never while the
+     user is typing or has a form open. Otherwise a background sync would wipe
+     an in-progress order. */
+  refreshView() {
+    if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+    if (document.querySelector('.modal-backdrop, .portal-modal-backdrop')) return;
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+    try {
+      if (typeof app !== 'undefined' && app.current && app.current !== 'login'
+          && typeof DB !== 'undefined' && DB.currentUser()) {
+        app.go(app.current);
+      }
+    } catch (e) {}
+    try { if (typeof refreshCloudStatus === 'function') refreshCloudStatus(); } catch (e) {}
+    setTimeout(() => this.setStatus(this._syncState), 0);
+  },
+
+  async silentSync(reason) {
+    if (!this.isEnabled() || !this.isReady() || !this._initialSyncDone || this._silentBusy) return;
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    this._silentBusy = true;
+    this.setStatus('syncing');
+    try {
+      await this.pullAndMerge();
+      if (this._lastPullChanged) this.refreshView();
+      this._lastAutoSyncAt = Date.now();
+      this.setStatus('ok');
+    } catch (e) {
+      console.warn('[AutoSync] ' + (reason || '') + ' failed:', e);
+      this.setStatus('offline');
+    } finally {
+      this._silentBusy = false;
+    }
+  },
+
+  /* Re-check on tab focus / wake-from-sleep / reconnect, plus a 2-minute
+     safety net. The realtime listener already covers normal remote changes. */
+  startAutoSync() {
+    if (this._autoSyncStarted || typeof document === 'undefined') return;
+    this._autoSyncStarted = true;
+    const maybe = (reason) => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - (this._lastAutoSyncAt || 0) < 20000) return;
+      this.silentSync(reason);
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') maybe('tab visible');
+    });
+    window.addEventListener('focus', () => maybe('focus'));
+    window.addEventListener('online', () => maybe('online'));
+    setInterval(() => maybe('timer'), 120000);
   },
 
   async loadSDK() {
@@ -385,7 +486,9 @@ const CLOUD = {
       return false;
     }
 
+    const beforeJson = JSON.stringify(DB._data);
     const merged = this.mergeData(DB._data, remoteData);
+    this._lastPullChanged = JSON.stringify(merged) !== beforeJson;
     DB._data = merged;
     try { DB.normalizeCounters(); } catch (e) {}
     this._suppressPush = true;
@@ -411,15 +514,15 @@ const CLOUD = {
 
       try {
         await this.pullAndMerge();
+        this._lastAutoSyncAt = Date.now();
+        if (this._lastPullChanged) this.refreshView();
+        this.setStatus('ok');
         clearTimeout(this._toastDebounceTimer);
         this._toastDebounceTimer = setTimeout(() => {
           if (typeof toast === 'function') {
             toast(`☁️ Synced from ${remote.deviceLabel || 'another device'} (${remote.updatedBy || 'user'})`, 'success');
           }
         }, 300);
-        if (typeof app !== 'undefined' && app.current && document.visibilityState === 'visible') {
-          setTimeout(() => app.go(app.current), 400);
-        }
       } catch(e) { console.warn('Sync merge failed:', e); }
     }, err => console.warn('Cloud listen error:', err));
   },
@@ -479,54 +582,68 @@ const CLOUD = {
   }
 };
 
-/* ============== AUTO-INIT ============== */
+/* ============== AUTO-INIT (zero-touch) ==============
+   Runs on EVERY page open. Pulls cloud data, pushes local changes, starts
+   the realtime listener, refreshes the visible screen and shows a status
+   pill. The client never has to press Merge / Push / Pull again. */
 (function cloudAutoInit() {
   if (typeof DB === 'undefined') return;
+  /* Short delay so the first paint happens instantly; login waits for the
+     result via CLOUD.whenInitialSyncDone(). */
   setTimeout(async () => {
-    if (CLOUD.isEnabled() && CLOUD.isReady()) {
-      try {
-        await CLOUD.init();
-        /* A backup was just restored → this device is the source of truth.
-           Publish it to the cloud instead of adopting older cloud data. */
-        if (localStorage.getItem('mrLaundryImportBaseline')) {
-          localStorage.removeItem('mrLaundryImportBaseline');
-          CLOUD._lastPushedJson = {};
-          CLOUD._lastPushedMeta = null;
-          await CLOUD.push();
-          await CLOUD.listen();
-          CLOUD._initialMergeDone = true;
-          CLOUD._initialSyncDone = true;
-          console.log('[Laundry POS] Restored backup published to cloud');
-          return;
-        }
-        /* A brand-new device with the built-in config must ADOPT the existing
-           cloud data, not push its local demo/seed records over the shop DB. */
-        const firstRun = !localStorage.getItem(CLOUD.LAST_SYNC_KEY);
-        let adopted = false;
-        if (firstRun && CLOUD.isAutoConfigured()) {
-          try { adopted = await CLOUD.adoptCloudIfPresent(); }
-          catch (e) { console.warn('First-run cloud adopt skipped:', e); }
-        }
-        if (!adopted) await CLOUD.pullAndMerge();
-        await CLOUD.push();
-        await CLOUD.listen();
-        CLOUD._initialMergeDone = true;
-        CLOUD._initialSyncDone = true;
-        console.log('[Laundry POS] Cloud sync active — chunked storage'
-          + (adopted ? ' (adopted cloud data on first run)' : ''));
-        setTimeout(() => {
-          if (typeof toast === 'function') toast('☁️ Cloud Sync active', 'success');
-        }, 1500);
-      } catch(e) {
-        console.warn('Cloud init failed:', e);
-        showCloudRecoveryPrompt('Cloud sync failed to start: ' + e.message);
+    if (!(CLOUD.isEnabled() && CLOUD.isReady())) {
+      CLOUD.setStatus('paused');
+      if (CLOUD.isReady() && !CLOUD.isEnabled()) {
+        showCloudRecoveryPrompt('Cloud Sync is paused. Re-enable to sync your data?');
       }
+      CLOUD._finishInitialSync();
       return;
     }
-    if (CLOUD.isReady() && !CLOUD.isEnabled()) {
-      showCloudRecoveryPrompt('Cloud Sync is paused. Re-enable to sync your data?');
+    CLOUD.setStatus('syncing');
+    try {
+      await CLOUD.init();
+      /* A backup was just restored → this device is the source of truth.
+         Publish it to the cloud instead of adopting older cloud data. */
+      if (localStorage.getItem('mrLaundryImportBaseline')) {
+        localStorage.removeItem('mrLaundryImportBaseline');
+        CLOUD._lastPushedJson = {};
+        CLOUD._lastPushedMeta = null;
+        await CLOUD.push();
+        await CLOUD.listen();
+        CLOUD._finishInitialSync();
+        CLOUD.refreshView();
+        console.log('[Laundry POS] Restored backup published to cloud');
+        return;
+      }
+      /* A brand-new device with the built-in config must ADOPT the existing
+         cloud data, not push its local demo/seed records over the shop DB. */
+      const firstRun = !localStorage.getItem(CLOUD.LAST_SYNC_KEY);
+      let adopted = false;
+      if (firstRun && CLOUD.isAutoConfigured()) {
+        try { adopted = await CLOUD.adoptCloudIfPresent(); }
+        catch (e) { console.warn('First-run cloud adopt skipped:', e); }
+      }
+      if (!adopted) await CLOUD.pullAndMerge();
+      await CLOUD.push();
+      await CLOUD.listen();
+      CLOUD._finishInitialSync();
+      CLOUD.setStatus('ok');
+      /* THIS was the missing piece: the startup pull updated DB._data but the
+         already-rendered page kept showing stale local data, so users pressed
+         "Merge Now" every day just to reload. */
+      if (adopted || CLOUD._lastPullChanged) CLOUD.refreshView();
+      console.log('[Laundry POS] Auto sync complete on open'
+        + (adopted ? ' (adopted cloud data on first run)' : ''));
+      setTimeout(() => {
+        if (typeof toast === 'function') toast('☁️ Data up to date — auto sync ON', 'success');
+      }, 1200);
+    } catch(e) {
+      console.warn('Cloud init failed:', e);
+      CLOUD._finishInitialSync();   // don't leave login waiting
+      CLOUD.setStatus('offline');
+      showCloudRecoveryPrompt('Cloud sync failed to start: ' + e.message);
     }
-  }, 2500);
+  }, 600);
 })();
 
 function showCloudRecoveryPrompt(msg) {
@@ -652,6 +769,14 @@ function cloudStatusHtml() {
   if (cfg) return '⏸️ Firebase key saved — sync paused (open Configure to enable)';
   return '❌ No Firebase key set — click Configure to add one';
 }
+/* Tiny always-visible "auto sync" pill in the top bar. Clicking it does an
+   instant check — it is NOT a daily requirement, just a reassurance. */
+function cloudSyncPillHtml() {
+  if (typeof CLOUD === 'undefined' || !CLOUD.isReady()) return '';
+  const on = CLOUD.isEnabled();
+  return `<button type="button" id="cloudSyncPill" title="Data auto-syncs on every open. Click for an instant check." style="border:0;border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;background:${on?'#d1fae5':'#fee2e2'};color:${on?'#065f46':'#991b1b'};">${on?'☁️ Auto-sync ON':'⚠️ Sync paused'}</button>`;
+}
+
 function refreshCloudStatus() {
   try {
     document.querySelectorAll('.cloud-status, #cloudStatus').forEach(el => el.innerHTML = cloudStatusHtml());
@@ -728,10 +853,22 @@ function openCloudSyncManager(prefill) {
       ${!enabled ? `
         <button type="button" class="btn btn-success btn-block" id="enableBtn">✅ Save &amp; Enable Cloud Sync</button>
       ` : `
-        <button type="button" class="btn btn-success" id="mergeNowBtn">🔄 Merge Now (Pull + Push)</button>
-        <button type="button" class="btn btn-primary" id="pushNowBtn">⬆️ Force Push This Device → Cloud</button>
-        <button type="button" class="btn btn-warning" id="pullNowBtn">⬇️ Force Pull Cloud → This Device (OVERWRITE)</button>
-        <button type="button" class="btn btn-danger" id="disableBtn">⏸️ Pause Cloud Sync</button>
+        <div style="background:#d1fae5;border-left:4px solid #10b981;padding:12px;border-radius:8px;font-size:12.5px;line-height:1.6;color:#065f46;">
+          ✅ <b>Auto Sync ON — ab roz kuch karne ki zarurat nahi.</b><br>
+          Website kholte hi cloud se data apne aap aa jata hai, har change apne aap push hota hai,
+          aur doosre system ki tabdeeliyan realtime mil jati hain. Tab dubara kholne par bhi
+          khud hi check ho jata hai.
+          <div style="margin-top:6px;font-size:11px;opacity:.85;">Last sync: ${esc(lastSync ? new Date(lastSync).toLocaleString() : 'just now')}</div>
+        </div>
+        <details style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:4px;">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-soft);">⚙️ Advanced / Troubleshooting (manual controls)</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+            <button type="button" class="btn btn-success" id="mergeNowBtn">🔄 Merge Now (Pull + Push)</button>
+            <button type="button" class="btn btn-primary" id="pushNowBtn">⬆️ Force Push This Device → Cloud</button>
+            <button type="button" class="btn btn-warning" id="pullNowBtn">⬇️ Force Pull Cloud → This Device (OVERWRITE)</button>
+            <button type="button" class="btn btn-danger" id="disableBtn">⏸️ Pause Cloud Sync</button>
+          </div>
+        </details>
       `}
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" class="btn btn-secondary" id="testCfgBtn" style="flex:1;min-width:140px;">🔌 Test Connection</button>

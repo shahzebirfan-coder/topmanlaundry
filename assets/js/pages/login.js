@@ -210,9 +210,11 @@ function renderLogin() {
           </button>
 
           ${cloudEnabled ? `
-          <button type="button" id="loginSyncBtn" class="lg-sync">
-            ☁️ <span>${t('login.forcesync', 'Force Cloud Sync')}</span>
-          </button>` : ''}
+          <div style="text-align:center;font-size:11.5px;color:var(--text-soft);margin-top:10px;line-height:1.6;">
+            ☁️ <b>Auto-sync ON</b> — website kholte hi saara data apne aap aa jata hai.<br>
+            Kisi Merge / Push / Pull button ko dabane ki zarurat nahi.
+            <a href="#" id="loginSyncBtn" style="color:var(--primary);font-weight:700;margin-left:4px;"><span>Check now</span></a>
+          </div>` : ''}
         </form>
 
         <!-- IT Department support — intentionally kept, do not remove -->
@@ -287,6 +289,22 @@ function renderLogin() {
     e.preventDefault();
     const f = new FormData(e.target);
     const btn = e.target.querySelector('button[type="submit"]');
+
+    /* ZERO-TOUCH: if the automatic first pull is still running, wait for it
+       (max 6s) so credentials are checked against the CLOUD users, not a
+       stale copy left in this browser from yesterday. */
+    if (typeof CLOUD !== 'undefined' && CLOUD.isEnabled() && CLOUD.isReady()
+        && typeof CLOUD.whenInitialSyncDone === 'function' && !CLOUD._initialSyncDone) {
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = '⏳ Loading your data...';
+      btn.disabled = true;
+      await Promise.race([
+        CLOUD.whenInitialSyncDone(),
+        new Promise(r => setTimeout(r, 6000))
+      ]);
+      btn.innerHTML = origHtml;
+      btn.disabled = false;
+    }
 
     let u = DB.login(f.get('username').trim(), f.get('password'));
 

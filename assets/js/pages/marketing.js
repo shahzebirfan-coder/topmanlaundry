@@ -1,5 +1,13 @@
 
-/* ===================== MARKETING STUDIO ===================== */
+/* ===================== MARKETING STUDIO =====================
+   WhatsApp image fix:
+   wa.me/<phone>?text=... can ONLY carry text — no public WhatsApp URL can
+   attach a file. So the branded JPG is now handed to the native OS share
+   sheet (Web Share API with `files`) where WhatsApp receives the IMAGE
+   already attached and the message as its caption. On desktop / browsers
+   without file sharing we fall back to the exact-chat link + a helper modal
+   (preview, download image, copy caption) so the ad can still be attached.
+   ============================================================ */
 
 const AI_PROMOS = [
   { 
@@ -16,9 +24,9 @@ const AI_PROMOS = [
   },
   { 
     title: 'Sleeping Customer Revival', 
-    desc: 'Target customers who haven\'t visited in 45 days with a flat 20% discount.',
+    desc: "Target customers who haven't visited in 45 days with a flat 20% discount.",
     offerText: '20% OFF EVERYTHING',
-    msg: 'Hello {name}, it\'s been a while! Come back to Laundry POS this week and get a flat 20% OFF your entire bill. Mention code {promo}.'
+    msg: "Hello {name}, it's been a while! Come back to Laundry POS this week and get a flat 20% OFF your entire bill. Mention code {promo}."
   }
 ];
 
@@ -26,8 +34,178 @@ let mktState = {
   templateIdx: 0,
   uploadedImage: null,
   audience: 'sleeping', // all, sleeping, vip
-  selectedPromo: ''
+  selectedPromo: '',
+  offerText: '50% OFF CARPETS!'
 };
+
+/* ------------------------------------------------------------------
+   1. Branded ad canvas — one shared generator used by BOTH
+      "Download Branded Ad" and every WhatsApp "Send".
+   ------------------------------------------------------------------ */
+function mktDrawBrandedAd() {
+  const img = mktState.uploadedImage;
+  if (!img || typeof document === 'undefined') return null;
+
+  const cvs = document.createElement('canvas');
+  const ctx = cvs.getContext('2d');
+  if (!ctx) return null;
+  const s = (typeof DB !== 'undefined' && DB.settings) ? DB.settings() : {};
+
+  cvs.width = 1080;
+  cvs.height = 1080; // Standard Insta/WhatsApp Square
+
+  // Background (cover)
+  const scale = Math.max(cvs.width / img.width, cvs.height / img.height);
+  const x = (cvs.width / 2) - (img.width / 2) * scale;
+  const y = (cvs.height / 2) - (img.height / 2) * scale;
+  ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+  // Dim overlay
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+  // Shop name / logo
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 10;
+  ctx.font = '900 60px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('🧺 ' + (s.shopName || 'Laundry POS'), 40, 80);
+
+  // Sticker
+  ctx.save();
+  ctx.translate(60, cvs.height - 180);
+  ctx.rotate(-5 * Math.PI / 180);
+
+  const offerEl = (typeof $ === 'function') ? $('#mktOfferText') : null;
+  const text = (offerEl && offerEl.value) || mktState.offerText || '50% OFF!';
+  ctx.font = '900 70px sans-serif';
+  const textWidth = ctx.measureText(text).width;
+
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = 'rgba(0,0,0,0.4)';
+  ctx.fillStyle = '#ef4444';
+  const bw = textWidth + 80, bh = 110, r = 55;
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(0, 0, bw, bh, r);
+  } else {
+    // Older browsers (and jsdom) have no roundRect — draw it manually.
+    ctx.moveTo(r, 0); ctx.lineTo(bw - r, 0); ctx.quadraticCurveTo(bw, 0, bw, r);
+    ctx.lineTo(bw, bh - r); ctx.quadraticCurveTo(bw, bh, bw - r, bh);
+    ctx.lineTo(r, bh); ctx.quadraticCurveTo(0, bh, 0, bh - r);
+    ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0); ctx.closePath();
+  }
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, 40, 75);
+  ctx.restore();
+
+  // Phone bottom bar
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, cvs.height - 80, cvs.width, 80);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('📞 Booking & Details: ' + (s.phone || ''), cvs.width / 2, cvs.height - 25);
+
+  return cvs;
+}
+
+/* Synchronous on purpose: Web Share needs the click's transient user
+   activation, so we must NOT await toBlob() before navigator.share(). */
+function mktCanvasToJpegFile(cvs) {
+  const dataUrl = cvs.toDataURL('image/jpeg', 0.9);
+  const b64 = String(dataUrl).split(',')[1] || '';
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new File([bytes], 'Topman_Promo_Ad.jpg', { type: 'image/jpeg' });
+}
+
+function mktDownloadCanvas(cvs) {
+  if (!cvs) return;
+  const a = document.createElement('a');
+  a.href = cvs.toDataURL('image/jpeg', 0.9);
+  a.download = 'MrLaundry_Promo.jpg';
+  a.click();
+  toast('Image downloaded! WhatsApp chat mein attach karein.', 'success');
+}
+
+function mktBuildMessage(template, name, promo) {
+  return String(template || '')
+    .replace(/\{name\}/g, name || '')
+    .replace(/\{promo\}/g, promo || 'NO-CODE');
+}
+
+function mktCopyText(txt) {
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    ta.remove();
+    toast('✅ Caption copied', 'success');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => toast('✅ Caption copied', 'success')).catch(fallback);
+  } else fallback();
+}
+
+function mktMarkSent(b, label) {
+  if (!b) return;
+  b.textContent = label || '✅ Sent';
+  b.classList.replace('btn-success', 'btn-ghost');
+  b.disabled = true;
+}
+
+/* Desktop / unsupported-browser fallback. Never auto-downloads or opens
+   anything without the user pressing a button. */
+function mktOpenAdFallback(cvs, msg, waUrl, btn) {
+  let dataUrl = '';
+  try { dataUrl = cvs.toDataURL('image/jpeg', 0.9); } catch (e) {}
+  openModal(`
+    <h3>📷 Ad image WhatsApp par bhejein</h3>
+    <p class="sub">Is device par WhatsApp ko image seedha attach nahi kiya ja sakta — WhatsApp ke
+      <code>wa.me</code> links sirf text le jate hain. Image download karke chat mein attach karein.</p>
+
+    ${dataUrl ? `<div style="text-align:center;margin:10px 0;">
+      <img src="${dataUrl}" alt="Branded ad" style="max-width:260px;max-height:260px;border-radius:10px;border:1px solid var(--border);box-shadow:0 6px 18px rgba(0,0,0,.15);"/>
+    </div>` : ''}
+
+    <div class="field">
+      <label>Caption (copy karein)</label>
+      <textarea id="mktCaption" rows="3" style="font-size:13px;line-height:1.4;">${escapeHtml(msg)}</textarea>
+    </div>
+
+    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.55;margin:10px 0;">
+      💡 <b>Mobile par (Android Chrome / iPhone Safari):</b> "Send" dabate hi native share sheet
+      khulti hai jisme ye image <b>pehle se attached</b> hoti hai aur upar wala text caption ban
+      jata hai — bas WhatsApp → contact → Send dabayein.
+    </div>
+
+    <div class="modal-footer" style="flex-wrap:wrap;">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-secondary" id="mktFbDownload">⬇️ Download Ad</button>
+      <button class="btn btn-secondary" id="mktFbCopy">📋 Copy Caption</button>
+      <button class="btn btn-primary" id="mktFbOpen">💬 Open WhatsApp</button>
+    </div>
+  `, { large: true, onOpen(m) {
+    $('#mktFbDownload', m).onclick = () => mktDownloadCanvas(cvs);
+    $('#mktFbCopy', m).onclick = () => mktCopyText(msg);
+    $('#mktFbOpen', m).onclick = () => {
+      window.open(waUrl, '_blank');
+      closeModal();
+      mktMarkSent(btn, '✅ Sent');
+      try { if (typeof logAction === 'function') logAction('marketing.whatsappText', 'Ad fallback: exact chat opened'); } catch (e) {}
+    };
+  }});
+}
 
 function renderMarketing() {
   if (DB.currentUser().role !== 'admin') { toast('Admin only','error'); app.go('dashboard'); return; }
@@ -66,7 +244,7 @@ function renderMarketing() {
           </div>
         </div>
         
-        <!-- Hidden Canvas for Export -->
+        <!-- Hidden Canvas for Export (kept for backwards compatibility) -->
         <canvas id="mktExportCanvas" style="display:none;"></canvas>
 
         <div class="field">
@@ -77,7 +255,10 @@ function renderMarketing() {
           <label>Sticker Text</label>
           <input type="text" id="mktOfferText" value="50% OFF CARPETS!" />
         </div>
-        <button class="btn btn-secondary btn-block" id="mktDownloadBtn" disabled>⬇️ Download Branded Ad</button>
+        <button class="btn btn-secondary btn-block" id="mktDownloadBtn" disabled>⬇️ Download Branded Ad (JPG)</button>
+        <div id="mktImageStatus" style="font-size:12px;color:#b45309;margin-top:8px;line-height:1.5;">
+          ⚠️ Abhi koi image nahi — WhatsApp par sirf text jayega.
+        </div>
       </div>
 
       <!-- 2. WHATSAPP BLASTER -->
@@ -106,6 +287,21 @@ function renderMarketing() {
         <div class="field">
           <label>Message (Variables: {name}, {promo})</label>
           <textarea id="mktMessage" rows="4" style="font-size:13px;line-height:1.4;">${escapeHtml(AI_PROMOS[0].msg)}</textarea>
+        </div>
+
+        <div style="background:#ecfdf5;border-left:4px solid #10b981;padding:10px 12px;border-radius:8px;margin:0 0 12px;font-size:12px;line-height:1.55;">
+          <label style="display:flex;gap:8px;align-items:flex-start;font-weight:700;cursor:pointer;">
+            <input type="checkbox" id="mktAttachImage" checked style="margin-top:2px;"/>
+            <span>📷 Branded ad image bhi bhejein (image + caption)</span>
+          </label>
+          <div style="margin-top:6px;color:#065f46;">
+            WhatsApp ka <code>wa.me</code> link sirf <b>text</b> le jata hai, image nahi. Isliye mobile par
+            <b>native share sheet</b> khulti hai jisme image pehle se attached hoti hai
+            (WhatsApp → contact → Send). Desktop par image download + caption copy milta hai.
+          </div>
+          <div id="mktAttachState" style="margin-top:6px;font-weight:700;color:#b45309;">
+            ⚠️ Image upload nahi hui — abhi sirf text jayega.
+          </div>
         </div>
 
         <div style="border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;">
@@ -138,15 +334,27 @@ function renderMarketing() {
   $('#mktUseIdeaBtn').onclick = () => {
     const idea = AI_PROMOS[mktState.templateIdx];
     $('#mktOfferText').value = idea.offerText;
+    mktState.offerText = idea.offerText;
     $('#mktMessage').value = idea.msg;
     updatePreview();
+    renderQueue();
   };
 
   // Canvas Logic
   const updatePreview = () => {
     $('#mktBadgeText').textContent = $('#mktOfferText').value;
   };
-  $('#mktOfferText').oninput = updatePreview;
+  $('#mktOfferText').oninput = () => {
+    mktState.offerText = $('#mktOfferText').value;
+    updatePreview();
+  };
+
+  const markImageReady = () => {
+    const msg = '✅ Branded ad ready — "Send" ab image ke saath jayega (mobile par share sheet khulegi).';
+    const a = $('#mktImageStatus'), b = $('#mktAttachState');
+    if (a) { a.textContent = msg; a.style.color = '#15803d'; }
+    if (b) { b.textContent = '✅ Image attached hogi — caption neeche wala message ban jayega.'; b.style.color = '#15803d'; }
+  };
 
   $('#mktImgUpload').onchange = (e) => {
     const file = e.target.files[0];
@@ -162,6 +370,7 @@ function renderMarketing() {
         $('#mktOverlay').style.display = 'flex';
         $('#mktDownloadBtn').disabled = false;
         $('#mktDownloadBtn').classList.replace('btn-secondary', 'btn-primary');
+        markImageReady();
       };
       img.src = ev.target.result;
     };
@@ -169,71 +378,9 @@ function renderMarketing() {
   };
 
   $('#mktDownloadBtn').onclick = () => {
-    if (!mktState.uploadedImage) return;
-    const cvs = $('#mktExportCanvas');
-    const ctx = cvs.getContext('2d');
-    const img = mktState.uploadedImage;
-    const s = DB.settings();
-    
-    cvs.width = 1080;
-    cvs.height = 1080; // Standard Insta/WhatsApp Square
-    
-    // Draw background
-    // calculate cover
-    const scale = Math.max(cvs.width / img.width, cvs.height / img.height);
-    const x = (cvs.width / 2) - (img.width / 2) * scale;
-    const y = (cvs.height / 2) - (img.height / 2) * scale;
-    ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-    
-    // Dim overlay
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(0,0,cvs.width,cvs.height);
-    
-    // Draw Logo
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = 10;
-    ctx.font = '900 60px sans-serif';
-    ctx.fillText('🧺 ' + (s.shopName||'Laundry POS'), 40, 80);
-    
-    // Draw Sticker
-    ctx.save();
-    ctx.translate(60, cvs.height - 180);
-    ctx.rotate(-5 * Math.PI / 180);
-    
-    const text = $('#mktOfferText').value;
-    ctx.font = '900 70px sans-serif';
-    const textWidth = ctx.measureText(text).width;
-    
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = 'rgba(0,0,0,0.4)';
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.roundRect(0, 0, textWidth + 80, 110, 55);
-    ctx.fill();
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#ffffff';
-    ctx.stroke();
-    
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(text, 40, 75);
-    ctx.restore();
-    
-    // Draw Phone Bottom Bar
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(0, cvs.height - 80, cvs.width, 80);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('📞 Booking & Details: ' + (s.phone||''), cvs.width/2, cvs.height - 25);
-    
-    // Download
-    const a = document.createElement('a');
-    a.href = cvs.toDataURL('image/jpeg', 0.9);
-    a.download = 'MrLaundry_Promo.jpg';
-    a.click();
-    toast('Image downloaded! You can now send it.', 'success');
+    const cvs = mktDrawBrandedAd();
+    if (!cvs) { toast('Pehle image upload karein', 'error'); return; }
+    mktDownloadCanvas(cvs);
   };
 
   // Blaster Logic
@@ -251,7 +398,9 @@ function renderMarketing() {
       const lastDate = lastOrder ? lastOrder.createdAt : 'Never';
       
       if (mktState.audience === 'vip' && !c.loyaltyActive) return;
-      if (mktState.audience === 'sleeping' && lastDate > thirtyDaysAgo) return;
+      // Customers with NO order at all are definitely "sleeping".
+      // Comparing the string 'Never' > ISO date used to wrongly exclude them.
+      if (mktState.audience === 'sleeping' && lastDate !== 'Never' && lastDate > thirtyDaysAgo) return;
       
       let daysAgo = 'Never';
       if (lastOrder) daysAgo = Math.floor((new Date() - new Date(lastDate)) / 86400000) + ' days ago';
@@ -284,19 +433,46 @@ function renderMarketing() {
     }).join('');
 
     $$('.mkt-send-btn').forEach(b => {
-      b.onclick = () => {
-        let msg = $('#mktMessage').value;
-        const promo = $('#mktPromo').value;
-        
-        msg = msg.replace(/\{name\}/g, b.dataset.name);
-        msg = msg.replace(/\{promo\}/g, promo || 'NO-CODE');
-        
-        const url = `https://wa.me/${b.dataset.phone}?text=${encodeURIComponent(msg)}`;
-        window.open(url, '_blank');
-        
-        // Visual feedback
-        b.textContent = '✅ Sent';
-        b.classList.replace('btn-success', 'btn-ghost');
+      b.onclick = async () => {
+        const msg = mktBuildMessage($('#mktMessage').value, b.dataset.name, $('#mktPromo').value);
+        const waUrl = `https://wa.me/${b.dataset.phone}?text=${encodeURIComponent(msg)}`;
+        const attach = $('#mktAttachImage') ? $('#mktAttachImage').checked : false;
+
+        let cvs = null;
+        if (attach) { try { cvs = mktDrawBrandedAd(); } catch (e) { cvs = null; } }
+        if (attach && !cvs) {
+          toast('📷 Ad image nahi mili — pehle background image upload karein. Abhi sirf text jayega.', 'warning');
+        }
+
+        /* Mobile: hand the REAL image to the OS share sheet. WhatsApp then
+           appears as a target with the JPG attached and `text` as caption. */
+        if (cvs && typeof navigator.share === 'function' && typeof File !== 'undefined') {
+          try {
+            const file = mktCanvasToJpegFile(cvs);
+            const canShare = !navigator.canShare || navigator.canShare({ files: [file] });
+            if (canShare) {
+              await navigator.share({
+                files: [file],
+                text: msg,
+                title: (DB.settings().shopName || 'Laundry POS') + ' — Special Offer'
+              });
+              mktMarkSent(b, '✅ Shared');
+              try { if (typeof logAction === 'function') logAction('marketing.whatsappImage', `Ad image shared with ${b.dataset.name}`); } catch (e) {}
+              return;
+            }
+          } catch (err) {
+            if (err && err.name === 'AbortError') return; // user closed the share sheet
+            // Unsupported / failed → fall through to the exact-chat fallback
+          }
+        }
+
+        /* Desktop & older browsers: exact chat link (text) + helper modal */
+        if (cvs) {
+          mktOpenAdFallback(cvs, msg, waUrl, b);
+        } else {
+          window.open(waUrl, '_blank');
+          mktMarkSent(b, '✅ Sent');
+        }
       };
     });
   };

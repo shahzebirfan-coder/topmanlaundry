@@ -419,7 +419,7 @@ function openBookingForm() {
             <input type="radio" name="bDelType" value="both" style="margin-bottom:6px;"/>
             <span style="font-size:28px;">🧺</span>
             <b style="font-size:13px;margin-top:4px;">${t('book.both')}</b>
-            <span style="font-size:10px;color:var(--text-soft);">As specified</span>
+            <span style="font-size:10px;color:var(--text-soft);">Choose per item</span>
           </label>
         </div>
       </div>

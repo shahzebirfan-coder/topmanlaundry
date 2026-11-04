@@ -9,6 +9,9 @@ const PORTAL_T = {
   'search_invoice':     { en: 'Search by Invoice #',                       ur: 'انوائس نمبر سے تلاش',                    rmn: 'Invoice se Search' },
   'enter_phone':        { en: 'Enter Your Contact Number',                 ur: 'اپنا فون نمبر درج کریں',                  rmn: 'Apna Phone Number Likhein' },
   'enter_invoice':      { en: 'Enter Invoice Number',                      ur: 'انوائس نمبر درج کریں',                   rmn: 'Invoice Number Likhein' },
+  'privacy_note':       { en: 'For your privacy, orders are shown only for the contact number registered with the shop.', ur: 'آپ کی پرائیویسی کے لیے آرڈر صرف دکان میں رجسٹرڈ فون نمبر سے دکھائے جاتے ہیں۔', rmn: 'Aapki privacy ke liye orders sirf shop mein registered contact number se dikhaye jate hain.' },
+  'enter_full_phone':   { en: 'Please enter your full contact number',     ur: 'براہ کرم اپنا مکمل فون نمبر درج کریں',      rmn: 'Apna poora contact number likhein' },
+  'phone_example':      { en: 'Example: 0346-2760066',                     ur: 'مثال: 0346-2760066',                     rmn: 'Misal: 0346-2760066' },
   'track_btn':          { en: 'Track My Order',                            ur: 'میرا آرڈر دیکھیں',                       rmn: 'Order Dekhein' },
 
   // Stats

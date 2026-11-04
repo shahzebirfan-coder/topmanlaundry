@@ -242,7 +242,7 @@ function openWhatsAppPicker(orderId) {
       closeModal();
       if (typeof sendWhatsAppInvoice === 'function') {
         const s = DB.settings();
-        const delTypeMap = {hanger:{label:'HANGER'},fold:{label:'FOLD'},both:{label:'BOTH'}};
+        const delTypeMap = {hanger:{label:'HANGER'},fold:{label:'FOLD'},both:{label:'HANGER / FOLD'}};
         sendWhatsAppInvoice(o, c, s, invoiceNo, totalPcs, delTypeMap[o.deliveryType||'hanger']||{label:'HANGER'});
       }
     };

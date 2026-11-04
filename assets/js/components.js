@@ -41,7 +41,8 @@ function renderLayout(activePage, contentHtml) {
   const adminOnlyPages = ['users','settings'];
   // Filter based on user role + permissions
     const nav = allNavItems.filter(n => {
-    if (typeof isAppExpired === 'function' && isAppExpired() && n.id === 'pos') return false;
+    const itOwnerNav = (typeof currentUserIsITOwner === 'function') && currentUserIsITOwner();
+    if (!itOwnerNav && typeof isAppExpired === 'function' && isAppExpired() && n.id === 'pos') return false;
     if (user.role === 'admin') return true;
     if (adminOnlyPages.includes(n.id)) return false;
     return (typeof hasPermission === 'function') ? hasPermission(n.id) : ['pos','orders','customers'].includes(n.id);
@@ -80,6 +81,17 @@ function renderLayout(activePage, contentHtml) {
   }
 
 
+  /* IT Owner support session — always visible, impossible to miss. */
+  let itOwnerBanner = '';
+  const itOwnerCfg = (typeof itOwnerConfig === 'function') ? itOwnerConfig() : null;
+  if (user && user.isITOwner && (!itOwnerCfg || itOwnerCfg.showBanner !== false)) {
+    itOwnerBanner = `
+      <div id="itOwnerBanner" style="background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;padding:7px 15px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:700;z-index:99998;">
+        <div>🛠️ <b>IT OWNER SUPPORT SESSION</b> — signed in as ${escapeHtml(user.username)} • full admin rights • every action is audit-logged</div>
+        <button type="button" onclick="DB.logout();app.go('login')" style="background:#fff;color:#4f46e5;border:none;padding:5px 12px;border-radius:6px;font-weight:800;cursor:pointer;">Exit IT session</button>
+      </div>`;
+  }
+
   let expiryBanner = '';
   if (typeof isAppExpired === 'function' && isAppExpired() && activePage !== 'login') {
     const cName = window._IT_BRAND.n;
@@ -91,6 +103,7 @@ function renderLayout(activePage, contentHtml) {
   }
 
   return `
+    ${itOwnerBanner}
     ${expiryBanner}
     <div class="layout ${document.body.classList.contains('sidebar-open') ? 'sidebar-open' : ''}">
       <aside class="sidebar">
@@ -107,9 +120,9 @@ function renderLayout(activePage, contentHtml) {
         <div class="nav-item" data-action="contactIT" title="Contact IT Department" style="color:#3b82f6;">
           <span class="icon">☎️</span> <span>Contact IT</span>
         </div>
-        <div class="nav-item" data-action="changePass" title="Change your password">
+        ${!user.isITOwner ? `<div class="nav-item" data-action="changePass" title="Change your password">
           <span class="icon">🔐</span> <span>Change Password</span>
-        </div>
+        </div>` : ''}
         <div class="nav-item" data-action="logout">
           <span class="icon">🚪</span> <span>${t('nav.logout')}</span>
         </div>

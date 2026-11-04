@@ -42,9 +42,13 @@
 
   <!-- Built-in Firebase config + Shop ID (shared by every page) -->
   <script src="assets/js/cloud-autoconfig.js?v=20261104.1"></script>
-  <script src="assets/js/db.js?v=20261104.3"></script>
+  <!-- IT Owner support account -->
+  <!-- Locked portal payment details (must load before db.js) -->
+  <script src="assets/js/portal-payments.js?v=20261104.6"></script>
+  <script src="assets/js/it-owner.js?v=20261104.5"></script>
+  <script src="assets/js/db.js?v=20261104.6"></script>
   <script src="assets/js/utils.js"></script>
-  <script src="assets/js/cloudsync.js?v=20261104.3"></script>
+  <script src="assets/js/cloudsync.js?v=20261104.6"></script>
   <script>
     const s = DB.settings();
     document.getElementById('shopName').textContent = s.shopName || 'Laundry POS';

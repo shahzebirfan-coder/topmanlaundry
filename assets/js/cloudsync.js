@@ -248,6 +248,9 @@ const CLOUD = {
         merged[tbl] = r;
       }
     }
+    /* Locked portal payment details are not negotiable: an older cloud copy
+       must never blank them or restore the previous shop's numbers. */
+    if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(merged);
     return merged;
   },
 

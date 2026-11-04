@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mr-laundry-pos-v22';
+const CACHE_NAME = 'mr-laundry-pos-v28';
 const urlsToCache = [
   './',
   './index.html',
@@ -14,6 +14,8 @@ const urlsToCache = [
   './assets/js/cloud-autoconfig.js',
   './assets/js/cloudsync.js',
   './assets/js/components.js',
+  './assets/js/it-owner.js',
+  './assets/js/portal-payments.js',
   './assets/js/db.js',
   './assets/js/extras.js',
   './assets/js/gdrive.js',

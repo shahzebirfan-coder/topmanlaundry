@@ -103,7 +103,7 @@ function openInventoryForm(existing) {
       </div>
     </div>
     <div style="background:var(--surface-alt);padding:10px;border-radius:8px;font-size:11px;color:var(--text-soft);margin-bottom:10px;">
-      💡 <b>Auto-Deduct:</b> When enabled, this item is automatically reduced from stock every time a new order is created. Hangers only deduct for "Hanger" or "Both" packaging type. Shoppers deduct for every piece in every order.
+      💡 <b>Auto-Deduct:</b> When enabled, this item is automatically reduced from stock every time a new order is created. Hangers only deduct for "Hanger" or "Hanger / Fold" packaging type. Shoppers deduct for every piece in every order.
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>

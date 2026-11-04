@@ -9,12 +9,10 @@ function openPaymentProofDialog(orderId) {
   const o = DB.get('orders', orderId);
   if (!o) return alert('Order not found');
   const c = DB.get('customers', o.customerId) || {};
+  /* Locked payment details are enforced centrally in portal-payments.js /
+     DB.settings(); this call is a belt-and-braces guard for direct callers. */
+  if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(DB._data);
   const s = DB.settings();
-  // Fallback defaults so payment cards ALWAYS show even on fresh installs
-  if (!s.jazzcashNumber) s.jazzcashNumber = '0302 8244803';
-  if (!s.jazzcashName)   s.jazzcashName   = 'Shahzeb Vakani';
-  if (!s.easypaisaNumber) s.easypaisaNumber = '0302 8244803';
-  if (!s.easypaisaName)   s.easypaisaName   = 'Shahzeb Vakani';
   const invNo = o.invoiceNo ? 'INV-' + o.invoiceNo : '#' + o.id.slice(-6).toUpperCase();
 
   const html = `
@@ -338,7 +336,8 @@ function showOrderNotification(title, body, orderId) {
   });
   n.onclick = () => {
     window.focus();
-    window.location.href = 'portal.html?invoice=' + orderId;
+    // Invoice links were removed for privacy — customer re-checks by phone.
+    window.location.href = 'portal.html';
     n.close();
   };
 }
@@ -611,6 +610,12 @@ function showPortalToast(msg, type='success') {
 function openPortalConfigDialog() {
   if (DB.currentUser().role !== 'admin') return;
   const s = DB.settings();
+  const payCfg = (typeof portalPaymentConfig === 'function') ? portalPaymentConfig() : null;
+  const payLocked = !!(payCfg && payCfg.locked);
+  const payRo = payLocked ? 'readonly' : '';
+  const payRoStyle = payLocked
+    ? 'background:#f1f5f9;color:#0f172a;font-weight:600;cursor:not-allowed;'
+    : '';
   const portalUrl = location.origin + location.pathname.replace(/\/[^\/]*$/, '/portal.html');
 
   openModal(`
@@ -629,21 +634,41 @@ function openPortalConfigDialog() {
       <small style="color:var(--text-soft);">One line per day. Add "Sunday: Closed" to show closed badge on Sundays.</small>
     </div>
 
-    <div style="font-weight:700;margin:14px 0 8px;border-top:1px solid var(--border);padding-top:14px;">💳 Payment Receiving Numbers</div>
+    <div style="font-weight:700;margin:14px 0 8px;border-top:1px solid var(--border);padding-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      💳 Payment Receiving Numbers
+      ${payLocked ? '<span style="background:#dcfce7;color:#166534;padding:2px 9px;border-radius:6px;font-size:11px;font-weight:800;">🔒 LOCKED</span>' : ''}
+    </div>
+    ${payLocked ? `
+    <div style="background:#dcfce7;border-left:4px solid #16a34a;padding:10px 12px;border-radius:8px;font-size:12.5px;margin-bottom:12px;line-height:1.55;">
+      🔒 <b>These details are locked by the IT Owner.</b> Un hataye ja sakte, na backup restore, na cloud sync aur na doosre device se overwrite honge.
+      Permanent change ke liye <code>assets/js/portal-payments.js</code> edit karein; is shop par temporary change ke liye neeche unlock button hai.
+      <div style="margin-top:6px;font-size:11.5px;color:#166534;">Source: <b>${s._portalPaymentsSource === 'it-override' ? 'IT override (this shop)' : 'built-in locked values'}</b></div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" id="unlockPayCfg">🔓 Unlock to edit (IT Admin)</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="resetPayCfg">↩️ Reset to locked values</button>
+      </div>
+      <div id="payUnlockBox" style="display:none;background:#fff;border:1px dashed #16a34a;padding:10px;border-radius:8px;margin-top:10px;">
+        <label style="font-size:12px;font-weight:700;">IT ADMIN Password</label>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+          <input type="password" id="payUnlockPwd" placeholder="Enter IT ADMIN password" style="flex:1;min-width:180px;padding:8px;border:1px solid var(--border);border-radius:8px;"/>
+          <button type="button" class="btn btn-primary btn-sm" id="payUnlockGo">Unlock</button>
+        </div>
+      </div>
+    </div>` : ''}
     <div class="form-row">
-      <div class="field"><label>JazzCash Account Name</label><input id="pcfgJCN" value="${escapeHtml(s.jazzcashName||'')}" placeholder="Shahzeb Vakani"/></div>
-      <div class="field"><label>JazzCash Number</label><input id="pcfgJC" value="${escapeHtml(s.jazzcashNumber||'')}" placeholder="0302 8244803"/></div>
+      <div class="field"><label>JazzCash Account Name</label><input id="pcfgJCN" ${payRo} style="${payRoStyle}" value="${escapeHtml(s.jazzcashName||'')}" placeholder="Muhammad Usman"/></div>
+      <div class="field"><label>JazzCash Number</label><input id="pcfgJC" ${payRo} style="${payRoStyle}" value="${escapeHtml(s.jazzcashNumber||'')}" placeholder="03462760066"/></div>
     </div>
     <div class="form-row">
-      <div class="field"><label>Easypaisa Account Name</label><input id="pcfgEPN" value="${escapeHtml(s.easypaisaName||'')}" placeholder="Shahzeb Vakani"/></div>
-      <div class="field"><label>Easypaisa Number</label><input id="pcfgEP" value="${escapeHtml(s.easypaisaNumber||'')}" placeholder="0302 8244803"/></div>
+      <div class="field"><label>Easypaisa Account Name</label><input id="pcfgEPN" ${payRo} style="${payRoStyle}" value="${escapeHtml(s.easypaisaName||'')}" placeholder="Muhammad Usman"/></div>
+      <div class="field"><label>Easypaisa Number</label><input id="pcfgEP" ${payRo} style="${payRoStyle}" value="${escapeHtml(s.easypaisaNumber||'')}" placeholder="03462760066"/></div>
     </div>
     <div class="form-row">
-      <div class="field"><label>Bank Name</label><input id="pcfgBN" value="${escapeHtml(s.bankName||'')}" placeholder="HBL / Meezan / etc."/></div>
-      <div class="field"><label>Account Title</label><input id="pcfgBT" value="${escapeHtml(s.bankAccountTitle||'')}" placeholder="Laundry POS"/></div>
+      <div class="field"><label>Bank Name</label><input id="pcfgBN" ${payRo} style="${payRoStyle}" value="${escapeHtml(s.bankName||'')}" placeholder="Bank Alfalah"/></div>
+      <div class="field"><label>Account Title</label><input id="pcfgBT" ${payRo} style="${payRoStyle}" value="${escapeHtml(s.bankAccountTitle||'')}" placeholder="Topman Quality Drycleaner"/></div>
     </div>
     <div class="form-row cols-1">
-      <div class="field"><label>Bank Account Number / IBAN</label><input id="pcfgBA" value="${escapeHtml(s.bankAccountNumber||'')}" placeholder="PK00 ABCD..."/></div>
+      <div class="field"><label>Bank Account Number / IBAN</label><input id="pcfgBA" ${payRo} style="${payRoStyle}" value="${escapeHtml(s.bankAccountNumber||'')}" placeholder="00161007089581"/></div>
     </div>
     <div class="form-row cols-1">
       <div class="field"><label>Payment Instructions</label><textarea id="pcfgPI" rows="2" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;">${escapeHtml(s.paymentInstructions||'Please pay to the above account and upload screenshot below. We will verify within 30 minutes.')}</textarea></div>
@@ -659,19 +684,68 @@ function openPortalConfigDialog() {
       <button class="btn btn-primary" id="savePortalCfg">💾 Save Portal Settings</button>
     </div>
   `, { large: true, onOpen(m) {
+    const LOCKED_IDS = ['pcfgJCN','pcfgJC','pcfgEPN','pcfgEP','pcfgBN','pcfgBT','pcfgBA'];
+    let unlocked = false;
+    const setLockState = (on) => {
+      LOCKED_IDS.forEach(id => {
+        const el = $('#' + id, m);
+        if (!el) return;
+        el.readOnly = !on;
+        el.style.background = on ? '#fff' : '#f1f5f9';
+        el.style.cursor = on ? 'text' : 'not-allowed';
+      });
+    };
+    const doUnlock = (pwd) => {
+      const isIT = (typeof currentUserIsITOwner === 'function') && currentUserIsITOwner();
+      const itPwd = (window._IT_BRAND && window._IT_BRAND.pwd) || '';
+      if (!isIT && pwd !== itPwd) { toast('Incorrect IT ADMIN Password!', 'error'); return; }
+      unlocked = true;
+      setLockState(true);
+      const box = $('#payUnlockBox', m); if (box) box.style.display = 'none';
+      toast('🔓 Unlocked — edits will be saved as a shop override', 'success');
+      if (isIT && typeof logAction === 'function') logAction('itowner.unlockPortalPayments', '');
+    };
+    if ($('#unlockPayCfg', m)) $('#unlockPayCfg', m).onclick = () => {
+      if ((typeof currentUserIsITOwner === 'function') && currentUserIsITOwner()) { doUnlock(''); return; }
+      const box = $('#payUnlockBox', m); if (box) { box.style.display = 'block'; box.querySelector('input')?.focus(); }
+    };
+    if ($('#payUnlockGo', m)) $('#payUnlockGo', m).onclick = () => doUnlock($('#payUnlockPwd', m).value);
+    if ($('#payUnlockPwd', m)) $('#payUnlockPwd', m).addEventListener('keyup', e => {
+      if (e.key === 'Enter' && $('#payUnlockGo', m)) $('#payUnlockGo', m).click();
+    });
+    if ($('#resetPayCfg', m)) $('#resetPayCfg', m).onclick = () => {
+      DB.saveSettings({ _portalPaymentsOverride: null });
+      const cfg = portalPaymentConfig();
+      const map = { pcfgJCN:'jazzcashName', pcfgJC:'jazzcashNumber', pcfgEPN:'easypaisaName',
+                    pcfgEP:'easypaisaNumber', pcfgBN:'bankName', pcfgBT:'bankAccountTitle',
+                    pcfgBA:'bankAccountNumber' };
+      Object.keys(map).forEach(id => {
+        const el = $('#' + id, m); if (el) el.value = cfg ? (cfg[map[id]] || '') : '';
+      });
+      unlocked = false; setLockState(false);
+      toast('✅ Reset to locked values', 'success');
+    };
+
     $('#savePortalCfg', m).onclick = () => {
-      DB.saveSettings({
+      const patch = {
         shopHours: $('#pcfgHours', m).value.trim(),
-        jazzcashName: $('#pcfgJCN', m).value.trim(),
-        jazzcashNumber: $('#pcfgJC', m).value.trim(),
-        easypaisaName: $('#pcfgEPN', m).value.trim(),
-        easypaisaNumber: $('#pcfgEP', m).value.trim(),
-        bankName: $('#pcfgBN', m).value.trim(),
-        bankAccountTitle: $('#pcfgBT', m).value.trim(),
-        bankAccountNumber: $('#pcfgBA', m).value.trim(),
         paymentInstructions: $('#pcfgPI', m).value.trim(),
         referralDiscountPercent: Math.max(0, +$('#pcfgRD', m).value || 10)
-      });
+      };
+      /* Locked fields are NEVER written from the dialog unless an IT admin
+         explicitly unlocked them. Enforcement in DB still wins otherwise. */
+      if (unlocked) {
+        patch._portalPaymentsOverride = {
+          jazzcashName:      $('#pcfgJCN', m).value.trim(),
+          jazzcashNumber:    $('#pcfgJC', m).value.trim(),
+          easypaisaName:     $('#pcfgEPN', m).value.trim(),
+          easypaisaNumber:   $('#pcfgEP', m).value.trim(),
+          bankName:          $('#pcfgBN', m).value.trim(),
+          bankAccountTitle:  $('#pcfgBT', m).value.trim(),
+          bankAccountNumber: $('#pcfgBA', m).value.trim()
+        };
+      }
+      DB.saveSettings(patch);
       closeModal();
       toast('Portal settings saved','success');
       if (typeof logAction === 'function') logAction('portal.config', '');

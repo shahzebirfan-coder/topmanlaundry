@@ -610,6 +610,13 @@ if (typeof window !== 'undefined') {
 }
 
 function promptPasswordModal(title, callback) {
+  /* IT Owner already has full rights — don't make them re-type the IT admin
+     password for every protected Settings dialog. Still audited. */
+  if (typeof currentUserIsITOwner === 'function' && currentUserIsITOwner()) {
+    try { if (typeof logAction === 'function') logAction('itowner.unlock', title); } catch (e) {}
+    callback('');
+    return;
+  }
   openModal(`
     <h3>${escapeHtml(title)}</h3>
     <div class="field">

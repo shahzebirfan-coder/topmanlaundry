@@ -78,7 +78,7 @@ const TRANSLATIONS = {
   'book.packaging':      { en: 'Packaging / Delivery Type', ur: 'پیکیجنگ / ڈیلیوری', rmn: 'Packaging' },
   'book.hanger':         { en: 'Hanger',                  ur: 'ہینگر',             rmn: 'Hanger' },
   'book.fold':           { en: 'Fold',                    ur: 'فولڈ',              rmn: 'Fold' },
-  'book.both':           { en: 'Both / Mixed',            ur: 'دونوں',             rmn: 'Dono' },
+  'book.both':           { en: 'Hanger / Fold',           ur: 'ہینگر / فولڈ',      rmn: 'Hanger / Fold' },
   'book.loyalty':        { en: 'Loyalty Card',            ur: 'لائلٹی کارڈ',       rmn: 'Loyalty Card' },
   'book.next':           { en: 'Next → Payment',          ur: 'آگے → پیمنٹ',       rmn: 'Aage → Payment' },
 

@@ -57,7 +57,8 @@ const app = {
     }
 
     
-    if (typeof isAppExpired === 'function' && isAppExpired()) {
+    const itOwnerSession = (typeof currentUserIsITOwner === 'function') && currentUserIsITOwner();
+    if (!itOwnerSession && typeof isAppExpired === 'function' && isAppExpired()) {
       const blocked = ['pos'];
       if (blocked.includes(page)) {
         toast('Subscription Expired. Read-only mode active.', 'error');

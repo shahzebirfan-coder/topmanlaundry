@@ -9,6 +9,7 @@ function logAction(action, details) {
     userName: user.name,
     username: user.username,
     role: user.role,
+    itOwner: !!user.isITOwner,
     timestamp: new Date().toISOString()
   });
   // Auto-trim to last 5000 entries
@@ -47,6 +48,7 @@ function renderAuditLog() {
         <option value="edit">✏️ Edits</option>
         <option value="inventory">📦 Inventory</option>
         <option value="day">📕 Day Close</option>
+        <option value="itowner">🛠️ IT Owner sessions</option>
       </select>
       <label>From <input type="date" id="alFrom" value="${auditFilter.dateFrom}"/></label>
       <label>To <input type="date" id="alTo" value="${auditFilter.dateTo}"/></label>
@@ -85,7 +87,9 @@ function filteredAudit() {
     if (auditFilter.dateFrom && d < auditFilter.dateFrom) return false;
     if (auditFilter.dateTo && d > auditFilter.dateTo) return false;
     if (auditFilter.user !== 'all' && e.username !== auditFilter.user) return false;
-    if (auditFilter.action !== 'all' && !e.action.toLowerCase().includes(auditFilter.action)) return false;
+    if (auditFilter.action === 'itowner') {
+      if (!e.itOwner && !e.action.toLowerCase().includes('itowner')) return false;
+    } else if (auditFilter.action !== 'all' && !e.action.toLowerCase().includes(auditFilter.action)) return false;
     if (auditFilter.search) {
       const q = auditFilter.search.toLowerCase();
       if (!e.action.toLowerCase().includes(q) && !(e.details||'').toLowerCase().includes(q)) return false;
@@ -119,8 +123,8 @@ function renderAuditBody() {
     const isEdit = e.action.includes('edit');
     return `<tr style="${isDelete?'background:rgba(239,68,68,.05);':''}">
       <td style="white-space:nowrap;font-size:12px;">${fmtDate(e.timestamp)}</td>
-      <td><b>${escapeHtml(e.userName||e.username)}</b></td>
-      <td><span class="badge ${e.role}">${e.role}</span></td>
+      <td><b>${escapeHtml(e.userName||e.username)}</b>${e.itOwner ? ' <span style="background:#ede9fe;color:#5b21b6;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:800;">🛠️ IT OWNER</span>' : ''}</td>
+      <td><span class="badge ${e.role}">${e.itOwner ? 'IT Owner' : e.role}</span></td>
       <td>${isDelete?'🗑️ ':isEdit?'✏️ ':''}${escapeHtml(e.action)}</td>
       <td>${escapeHtml(e.details||'')}</td>
     </tr>`;

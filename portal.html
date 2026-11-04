@@ -262,6 +262,11 @@
       box-shadow: 0 4px 12px rgba(79,124,255,0.15);
       transform: scale(1.02);
     }
+    .portal-tab-single button { cursor: default; transform: none; }
+    .privacy-note {
+      margin: -4px 0 14px; font-size: 12px; color: #64748b;
+      display: flex; gap: 6px; align-items: flex-start; line-height: 1.45;
+    }
 
     .big-input {
       width: 100%; padding: 18px 20px; font-size: 17px;
@@ -775,13 +780,16 @@
       </div>
 
       <div class="portal-card">
-        <div class="portal-tab">
-          <button class="active" data-tab="phone">📱 <span data-i18n="search_phone">Search by Phone</span></button>
-          <button data-tab="invoice">🧾 <span data-i18n="search_invoice">Search by Invoice #</span></button>
+        <!-- Phone-only lookup. "Search by Invoice #" was removed for customer
+             privacy: invoice numbers are sequential, so anyone could guess
+             another customer's number and open their bill. -->
+        <div class="portal-tab portal-tab-single">
+          <button class="active" type="button" tabindex="-1">📱 <span data-i18n="search_phone">Search by Phone</span></button>
         </div>
 
-        <label id="searchLbl" style="font-weight:700;font-size:13px;display:block;margin-bottom:6px;"><span data-i18n="enter_phone">Enter Your Contact Number</span></label>
-        <input id="searchInp" class="big-input" placeholder="03XX-XXXXXXX"/>
+        <label id="searchLbl" for="searchInp" style="font-weight:700;font-size:13px;display:block;margin-bottom:6px;"><span data-i18n="enter_phone">Enter Your Contact Number</span></label>
+        <input id="searchInp" class="big-input" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="03XX-XXXXXXX"/>
+        <div class="privacy-note">🔒 <span data-i18n="privacy_note">For your privacy, orders are shown only for the contact number registered with the shop.</span></div>
         <button class="big-btn" id="searchBtn">🔍 <span data-i18n="track_btn">Track My Order</span></button>
       </div>
 
@@ -815,10 +823,14 @@
   </div>
 
   <script src="assets/js/i18n.js"></script>
-  <script src="assets/js/portal-i18n.js"></script>
-  <script src="assets/js/db.js?v=20261104.3"></script>
+  <script src="assets/js/portal-i18n.js?v=20261104.7"></script>
+  <!-- IT Owner support account -->
+  <!-- Locked portal payment details (must load before db.js) -->
+  <script src="assets/js/portal-payments.js?v=20261104.6"></script>
+  <script src="assets/js/it-owner.js?v=20261104.5"></script>
+  <script src="assets/js/db.js?v=20261104.6"></script>
   <script src="assets/js/utils.js"></script>
-  <script src="assets/js/portal-helpers.js"></script>
+  <script src="assets/js/portal-helpers.js?v=20261104.7"></script>
   <!-- Built-in Firebase config + Shop ID (shared by every page) -->
   <script src="assets/js/cloud-autoconfig.js?v=20261104.1"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -900,6 +912,7 @@
         if (fetched.products) DB._data.products = fetched.products;
         if (fetched.settings) {
            DB._data.settings = Object.assign({}, DB._data.settings, fetched.settings);
+           if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(DB._data);
            const s = DB._data.settings;
            document.getElementById('shopName').textContent = s.shopName || 'Laundry POS';
            document.title = (s.shopName || 'Laundry POS') + ' — Order Tracker';
@@ -1086,30 +1099,20 @@
       document.getElementById('contactShop').style.display = 'block';
     }
 
-    let tab = 'phone';
+    /* Phone-only search (invoice lookup removed for privacy). */
     const searchLbl = document.getElementById('searchLbl');
     const searchInp = document.getElementById('searchInp');
     const result = document.getElementById('result');
 
-    document.querySelectorAll('.portal-tab button').forEach(b => b.onclick = (ev) => {
-      // Find the actual button (in case user clicked the inner span)
-      const btn = ev.currentTarget;
-      document.querySelectorAll('.portal-tab button').forEach(x => x.classList.remove('active'));
-      btn.classList.add('active');
-      tab = btn.dataset.tab;
-      if (tab === 'phone') {
-        searchLbl.textContent = pt('enter_phone');
-        searchInp.placeholder = '03XX-XXXXXXX';
-        searchInp.type = 'tel';
-      } else {
-        searchLbl.textContent = pt('enter_invoice');
-        searchInp.placeholder = 'e.g. INV-1023 or 1023';
-        searchInp.type = 'text';
-      }
-      searchInp.value = '';
-      result.innerHTML = '';
-      searchInp.focus();
-    });
+    /* Normalise Pakistani numbers so 0346…, +92 346…, 92346… and
+       0346-…  all match the same customer. */
+    function normPhone(v) {
+      let d = String(v || '').replace(/[^\d]/g, '');
+      if (d.startsWith('0092')) d = d.slice(4);
+      else if (d.startsWith('92') && d.length === 12) d = d.slice(2);
+      if (d.startsWith('0')) d = d.slice(1);
+      return d;
+    }
 
     document.getElementById('searchBtn').onclick = doSearch;
     searchInp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
@@ -1120,22 +1123,21 @@
       let orders = [];
       let customer = null;
 
-      if (tab === 'phone') {
-        const cleanQ = q.replace(/[^\d]/g, '');
-        customer = DB.all('customers').find(c => {
-          const cp = (c.phone || '').replace(/[^\d]/g, '');
-          return cp && cp === cleanQ;
-        });
-        if (!customer) {
-          result.innerHTML = noResultsHTML('We couldn\'t find any orders for this phone number.', 'Please double-check your number, or contact us using the buttons below.');
-          return;
-        }
-        orders = DB.all('orders').filter(o => o.customerId === customer.id);
-      } else {
-        const invNum = q.replace(/[^\d]/g, '');
-        orders = DB.all('orders').filter(o => String(o.invoiceNo||'') === invNum || o.id.slice(-6).toLowerCase() === q.toLowerCase());
-        if (orders.length) customer = DB.get('customers', orders[0].customerId);
+      const cleanQ = normPhone(q);
+      // A full mobile number is required — no partial / prefix matching.
+      if (cleanQ.length < 10) {
+        result.innerHTML = noResultsHTML(pt('enter_full_phone', 'Please enter your full contact number'), pt('phone_example', 'Example: 0346-2760066'));
+        return;
       }
+      customer = DB.all('customers').find(c => {
+        const cp = normPhone(c.phone);
+        return cp && cp === cleanQ;
+      });
+      if (!customer) {
+        result.innerHTML = noResultsHTML('We couldn\'t find any orders for this phone number.', 'Please double-check your number, or contact us using the buttons below.');
+        return;
+      }
+      orders = DB.all('orders').filter(o => o.customerId === customer.id);
 
       if (!orders.length) { result.innerHTML = noResultsHTML(pt('no_orders'), pt('check_number')); return; }
       renderOrders(orders, customer);
@@ -1235,7 +1237,7 @@
             ${o.due > 0
               ? `<div class="info-card danger"><div class="lbl">${pt("outstanding")}</div><div class="val">${fmtMoney(o.due)}</div></div>`
               : `<div class="info-card success"><div class="lbl">${pt("payment")}</div><div class="val">✓ ${pt("paid")}</div></div>`}
-            ${o.deliveryType ? `<div class="info-card"><div class="lbl">${pt("packaging")}</div><div class="val" style="font-size:13px;text-transform:uppercase;">${o.deliveryType === 'hanger' ? '🧥 Hanger' : o.deliveryType === 'fold' ? '📦 Fold' : '🧺 Both'}</div></div>` : ''}
+            ${o.deliveryType ? `<div class="info-card"><div class="lbl">${pt("packaging")}</div><div class="val" style="font-size:13px;text-transform:uppercase;">${o.deliveryType === 'hanger' ? '🧥 Hanger' : o.deliveryType === 'fold' ? '📦 Fold' : '🧺 Hanger / Fold'}</div></div>` : ''}
           </div>
 
           ${o.items && o.items.length ? `
@@ -1280,16 +1282,18 @@
       result.innerHTML = html;
     }
 
-    // Auto-search if URL has ?phone=... or ?invoice=...
+    // Auto-search only for ?phone=...  — ?invoice=... links are ignored
+    // (privacy) and removed from the address bar.
     const urlParams = new URLSearchParams(location.search);
+    if (urlParams.has('invoice') || urlParams.has('inv') || urlParams.has('order')) {
+      ['invoice','inv','order'].forEach(k => urlParams.delete(k));
+      try {
+        const qs = urlParams.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+      } catch (e) {}
+    }
     if (urlParams.get('phone')) {
-      tab = 'phone';
       searchInp.value = urlParams.get('phone');
-      setTimeout(doSearch, 200);
-    } else if (urlParams.get('invoice')) {
-      tab = 'invoice';
-      document.querySelectorAll('.portal-tab button')[1].click();
-      searchInp.value = urlParams.get('invoice');
       setTimeout(doSearch, 200);
     } else {
       searchInp.focus();

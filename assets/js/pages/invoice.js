@@ -10,7 +10,7 @@ function openInvoice(orderId, autoPrint) {
   const delTypeMap = {
     hanger: { icon: '🧥', label: 'HANGER' },
     fold:   { icon: '📦', label: 'FOLD' },
-    both:   { icon: '🧺', label: 'BOTH / MIXED' }
+    both:   { icon: '🧺', label: 'HANGER / FOLD' }
   };
   const delTypeInfo = delTypeMap[(o.deliveryType||'').toLowerCase()] || delTypeMap.hanger;
 

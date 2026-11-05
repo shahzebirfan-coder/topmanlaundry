@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="assets/css/responsive.css?v=20260616.0014" />
   <link rel="stylesheet" href="assets/css/boot.css?v=20261027.1" />
   <link rel="stylesheet" href="assets/css/expenses.css?v=20261027.1" />
-  <link rel="stylesheet" href="assets/css/holiday-themes.css?v=20261104.14" />
+  <link rel="stylesheet" href="assets/css/holiday-themes.css?v=20261104.15" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="manifest" href="manifest.json"/>
@@ -60,7 +60,7 @@
   <script src="assets/js/notifications.js?v=20260616.0014"></script>
   <script src="assets/js/persistent.js?v=20260616.0014"></script>
   <!-- Auto holiday themes for the login screen (offline date engine) -->
-  <script src="assets/js/holiday-themes.js?v=20261104.14"></script>
+  <script src="assets/js/holiday-themes.js?v=20261104.15"></script>
   <script src="assets/js/pages/login.js?v=20261104.13"></script>
   <script src="assets/js/pages/dashboard.js?v=20260616.0014"></script>
   <script src="assets/js/pages/taskboard.js"></script>
@@ -95,6 +95,34 @@
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(()=>{}));
     }
+  </script>
+  <script>
+    /* Holiday theme self-check: open index.html?htDebug=1
+       If the new JS never loaded (old upload / cache), THIS tiny inline
+       script still reports it — it does not depend on holiday-themes.js. */
+    (function () {
+      try {
+        if (!/(?:^|[?&])htDebug=1(?:&|$)/.test(location.search)) return;
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            if (window.HT && window.HT.renderDiagnostics) { window.HT.renderDiagnostics(); return; }
+            if (document.getElementById('htDebugMissing')) return;
+            var d = document.createElement('div');
+            d.id = 'htDebugMissing';
+            d.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;max-width:430px;' +
+              'background:#7f1d1d;color:#fff;padding:13px 15px;border-radius:12px;' +
+              'box-shadow:0 12px 34px rgba(0,0,0,.4);font:12px/1.65 ui-monospace,Consolas,monospace';
+            d.innerHTML = '<b>❌ holiday-themes.js LOAD NAHI HUA</b><br>' +
+              'Yani ye <b>purana build</b> hai ya browser/CDN purana index.html de raha hai.<br><br>' +
+              '1) Naya <b>topmanlaundry.zip</b> upload karein (assets/js/holiday-themes.js + 3 images bhi).<br>' +
+              '2) Direct check karein: <b>/assets/js/holiday-themes.js</b> kholein — 404 aaye to file upload nahi hui.<br>' +
+              '3) <b>Ctrl+F5</b> (hard refresh) karein taake naya service worker v34 aaye.<br>' +
+              '4) Host/CDN cache purge karein agar abhi bhi purana HTML aaye.';
+            document.body.appendChild(d);
+          }, 500);
+        });
+      } catch (e) {}
+    })();
   </script>
 </body>
 </html>

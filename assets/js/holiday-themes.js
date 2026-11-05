@@ -515,6 +515,7 @@
       if (old) old.remove();
       panel.insertAdjacentHTML('afterbegin', ribbonHtml(o));
     }
+    renderDiagnostics();
     /* browser chrome + tab title also pick up the occasion */
     try {
       const meta = document.querySelector('meta[name="theme-color"]');
@@ -875,7 +876,7 @@
 
   /* ---------------- auto hook for portal pages ---------------- */
   function initAuto() {
-    const run = () => renderPortalBanner();
+    const run = () => { renderPortalBanner(); renderDiagnostics(); };
     try {
       if (typeof document === 'undefined') return;
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
@@ -887,13 +888,83 @@
     } catch (e) {}
   }
 
+  /* ---------------- self-diagnostic: ?htDebug=1 ----------------
+     Shows exactly why a holiday theme is (or is not) active on THIS
+     device — local date, settings, active event, module version. */
+  const BUILD = '20261104.15';
+  function debugOn() {
+    try { return typeof location !== 'undefined' && /(?:^|[?&])htDebug=1(?:&|$)/.test(location.search || ''); }
+    catch (e) { return false; }
+  }
+  function diagnostics() {
+    const c = cfg();
+    const s = rawSettings();
+    const n = new Date();
+    const o = state();
+    let tz = 'n/a';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'n/a'; } catch (e) {}
+    let reason = '—';
+    if (forcedOff()) reason = '❌ ?htOff=1 se theme band ki gayi hai';
+    else if (!c.enabled) reason = '❌ Master switch OFF (holidayThemesEnabled=false)';
+    else if (!o) reason = `⚪ Koi event ${c.leadDays}-din ke window mein nahi (ya sab disabled / date override)`;
+    else reason = '✅ Sab theek — theme lagni chahiye';
+    return {
+      loaded: true, build: BUILD,
+      date: `${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}`,
+      time: `${pad(n.getHours())}:${pad(n.getMinutes())}`,
+      tz,
+      enabled: c.enabled, leadDays: c.leadDays,
+      disabled: c.disabled.join(', ') || '(koi nahi)',
+      overrides: Object.keys(c.overrides).length ? JSON.stringify(c.overrides) : '(koi nahi)',
+      showPortraits: c.showPortraits,
+      savedMasterFlag: s.holidayThemesEnabled,
+      active: o ? `${o.ev.name} · ${o.leadLabel} · ${fmtDate(o.date)}` : '(koi nahi)',
+      reason
+    };
+  }
+  function renderDiagnostics() {
+    if (!debugOn() || typeof document === 'undefined') return;
+    const d = diagnostics();
+    let el = document.getElementById('htDebugPanel');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'htDebugPanel';
+      el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;max-width:430px;' +
+        'background:#0f2233;color:#e8f2f8;padding:12px 14px;border-radius:12px;' +
+        'box-shadow:0 12px 34px rgba(0,0,0,.38);font:11.5px/1.65 ui-monospace,Consolas,monospace;' +
+        'border:1px solid #3a5a72;';
+      document.body.appendChild(el);
+    }
+    const row = (k, v) => `<div><span style="color:#8fb3c9;display:inline-block;min-width:132px">${esc(k)}</span><b>${esc(v)}</b></div>`;
+    el.innerHTML = `
+      <div style="font-size:13px;font-weight:800;color:#ffd77a;margin-bottom:6px">🔍 Holiday Theme Diagnostic
+        <span style="float:right;cursor:pointer;color:#fff" onclick="this.parentNode.parentNode.remove()">✕</span></div>
+      ${row('JS module', 'loaded ✅  v' + d.build)}
+      ${row('Device date', d.date + '  ' + d.time)}
+      ${row('Timezone', d.tz)}
+      ${row('Master ON', String(d.enabled))}
+      ${row('Lead days', String(d.leadDays))}
+      ${row('Disabled', d.disabled)}
+      ${row('Date overrides', d.overrides)}
+      ${row('Portraits ON', String(d.showPortraits))}
+      ${row('Active event', d.active)}
+      <div style="margin-top:7px;padding-top:7px;border-top:1px solid #3a5a72;color:#b9e6c9">${esc(d.reason)}</div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;font-family:inherit">
+        <a href="?htPreview=iqbal" style="color:#7fd1ff">force Iqbal</a>
+        <a href="?htDate=2026-11-09" style="color:#7fd1ff">9 Nov</a>
+        <a href="?htDate=2026-12-25" style="color:#7fd1ff">Quaid Day</a>
+        <a href="?" style="color:#7fd1ff">clear</a>
+      </div>
+      <div style="margin-top:6px;color:#8fb3c9">Agar ye panel na dikhe to naya <b>index.html</b> upload nahi hua / Ctrl+F5 karein.</div>`;
+  }
+
   /* ---------------- public API ---------------- */
   const HT = {
     BUILTIN, PALETTES: P,
     cfg, allEvents, occurrencesFor, resolvedFor, activeOn, upcoming, state,
     decorate, fmtDate, art, panelHtml, ribbonHtml, topbarBadgeHtml, portalBannerHtml,
     decorateLogin, renderPortalBanner, dismissPortal, showDetails, openDialog, styleAttr,
-    portraitUrl, portraitHtml, personHtml,
+    portraitUrl, portraitHtml, personHtml, diagnostics, renderDiagnostics, debugOn,
     /* test / demo helpers */
     setPreview(id) { try { sessionStorage.setItem('htPreviewEvent', id || ''); } catch (e) {} },
     clearPreview() { try { sessionStorage.removeItem('htPreviewEvent'); } catch (e) {} }

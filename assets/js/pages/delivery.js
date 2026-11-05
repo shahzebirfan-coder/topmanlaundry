@@ -1,6 +1,223 @@
 /* ===================== PICKUP & DELIVERY MODULE ===================== */
 let deliveryFilter = { tab: 'requests', status: 'all', driverId: 'all' };
 
+/* ============ CAPTAIN / DRIVER WHATSAPP NOTIFICATION ============
+   Assign karte hi captain ke saved number par pickup ki POORI details
+   (contact name, contact number, address, date, slot, notes) chali jati hain. */
+function psWaNumber(phone) {
+  let d = String(phone || '').replace(/[^\d]/g, '');
+  if (d.startsWith('0092')) d = d.slice(4);
+  if (d.startsWith('0') && d.length === 11) d = '92' + d.slice(1);
+  return d;
+}
+function buildCaptainMessage(req, driver) {
+  let s = {};
+  try { s = DB.settings() || {}; } catch (e) {}
+  const ref = '#' + String(req.id || '').slice(-6).toUpperCase();
+  const L = [
+    '🚚 *NEW PICKUP ASSIGNMENT* ' + ref,
+    '',
+    '👤 *Contact Person:* ' + (req.customerName || '-'),
+    '📞 *Contact Number:* ' + (req.customerPhone || '-'),
+    '📍 *Address:* ' + (req.address || '-'),
+    '📅 *Pickup Date:* ' + (req.pickupDate || '-'),
+    '⏰ *Time Slot:* ' + ((typeof formatPickupSlot === 'function') ? formatPickupSlot(req.pickupSlot) : (req.pickupSlot || '-'))
+  ];
+  if (req.notes) L.push('📝 *Notes:* ' + req.notes);
+  L.push('', '🛵 *Captain:* ' + (driver.name || '-'));
+  L.push('🏪 ' + (s.shopName || 'Laundry POS') + (s.phone ? ' • ' + s.phone : ''));
+  return L.join('\n');
+}
+function captainWaUrl(req, driver) {
+  const n = psWaNumber(driver.phone);
+  if (!n) return '';
+  return 'https://wa.me/' + n + '?text=' + encodeURIComponent(buildCaptainMessage(req, driver));
+}
+function openCaptainShareFallback(req, driver, note) {
+  const msg = buildCaptainMessage(req, driver);
+  const url = captainWaUrl(req, driver);
+  openModal(`
+    <h3>📱 Captain ko details bhejein</h3>
+    <p class="sub">${escapeHtml(note || 'WhatsApp khul gaya hai — neeche se bhi bhej sakte hain.')}</p>
+    <div class="field">
+      <label>Message (copy karlein)</label>
+      <textarea id="capMsg" rows="10" style="font-size:13px;line-height:1.5;">${escapeHtml(msg)}</textarea>
+    </div>
+    <div class="modal-footer" style="flex-wrap:wrap;">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      <button class="btn btn-secondary" id="capCopy">📋 Copy Details</button>
+      ${url ? `<button class="btn btn-success" id="capOpen">💬 Open WhatsApp</button>` : ''}
+    </div>
+  `, { large:true, onOpen(m) {
+    $('#capCopy', m).onclick = () => {
+      const ta = $('#capMsg', m); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      toast('✅ Details copied', 'success');
+    };
+    if ($('#capOpen', m)) $('#capOpen', m).onclick = () => window.open(url, '_blank');
+  }});
+}
+function sendCaptainWhatsApp(requestId, driverId) {
+  const req = DB.get('pickupRequests', requestId);
+  const driver = DB.get('drivers', driverId) || {};
+  if (!req) return false;
+  const url = captainWaUrl(req, driver);
+  if (!url) {
+    toast('⚠️ Captain ka WhatsApp number add karein — Drivers tab mein', 'error');
+    openCaptainShareFallback(req, driver, 'Is captain ka number saved nahi hai. Details copy karlein ya Drivers tab mein number add karein.');
+    return false;
+  }
+  let opened = null;
+  try { opened = window.open(url, '_blank'); } catch (e) {}
+  if (!opened) {
+    openCaptainShareFallback(req, driver, 'Popup block ho gaya. Neeche se WhatsApp kholein ya details copy karein.');
+  } else {
+    toast('✅ Captain ko WhatsApp par details bhej di gayi — Send dabayein', 'success');
+  }
+  try { if (typeof logAction === 'function') logAction('pickup.captainWhatsApp', (driver.name || '') + ' ← ' + (req.customerName || '')); } catch (e) {}
+  return true;
+}
+
+/* ============ CUSTOMER CONFIRMATION WHATSAPP ============
+   Assign par customer ko bhi message jata hai: pickup confirm, captain ka
+   naam + contact number, date/time slot, "soon arrive" aur thanks. */
+const DEFAULT_CUSTOMER_PICKUP_TEMPLATE = [
+  '✅ *PICKUP CONFIRMED* {ref}',
+  '',
+  'Hi {name}! 👋',
+  'Aapki pickup request confirm ho gayi hai. Hamara captain jald aapke door par pahunchega. 🛵',
+  '',
+  '🛵 *Your Captain:* {captain}',
+  '📞 *Captain Contact:* {captainPhone}',
+  '📅 *Pickup Date:* {date}',
+  '⏰ *Time Slot:* {slot}',
+  '📍 *Pickup Address:* {address}',
+  '',
+  'He will soon arrive at your door. 🚪',
+  'Thanks for choosing {shop}! 🧺',
+  '📞 Shop: {shopPhone}'
+].join('\n');
+
+function buildCustomerMessage(req, driver) {
+  let s = {};
+  try { s = DB.settings() || {}; } catch (e) {}
+  const vars = {
+    '{name}':         req.customerName || '',
+    '{captain}':      driver.name || '-',
+    '{captainPhone}': driver.phone || '-',
+    '{date}':         req.pickupDate || '-',
+    '{slot}':         (typeof formatPickupSlot === 'function') ? formatPickupSlot(req.pickupSlot) : (req.pickupSlot || '-'),
+    '{address}':      req.address || '-',
+    '{shop}':         s.shopName || 'Laundry POS',
+    '{shopPhone}':    s.phone || '',
+    '{ref}':          '#' + String(req.id || '').slice(-6).toUpperCase()
+  };
+  const tpl = (s.pickupCustomerWaTemplate && String(s.pickupCustomerWaTemplate).trim())
+    ? String(s.pickupCustomerWaTemplate) : DEFAULT_CUSTOMER_PICKUP_TEMPLATE;
+  let msg = tpl;
+  Object.keys(vars).forEach(k => { msg = msg.split(k).join(vars[k]); });
+  return msg;
+}
+function customerWaUrl(req, driver) {
+  const n = psWaNumber(req.customerPhone);
+  if (!n) return '';
+  return 'https://wa.me/' + n + '?text=' + encodeURIComponent(buildCustomerMessage(req, driver));
+}
+function psCopyTextarea(m, id) {
+  const ta = $(id, m);
+  if (!ta) return;
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  toast('✅ Message copied', 'success');
+}
+function openPickupNotifyPanel(requestId, driverId, note) {
+  const req = DB.get('pickupRequests', requestId) || {};
+  const driver = DB.get('drivers', driverId) || {};
+  const custMsg = buildCustomerMessage(req, driver);
+  const captMsg = buildCaptainMessage(req, driver);
+  const custUrl = customerWaUrl(req, driver);
+  const captUrl = captainWaUrl(req, driver);
+  openModal(`
+    <h3>📱 Pickup notifications</h3>
+    <p class="sub">${escapeHtml(note || 'Neeche se dono messages WhatsApp par bhejein ya copy karein.')}</p>
+
+    <div class="field">
+      <label>👤 Customer — confirmation + captain details</label>
+      <textarea id="puCustMsg" rows="9" style="font-size:13px;line-height:1.5;">${escapeHtml(custMsg)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="puCustCopy">📋 Copy Customer Message</button>
+        ${custUrl ? '<button class="btn btn-success btn-sm" id="puCustOpen">💬 Open Customer WhatsApp</button>' : ''}
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:14px;">
+      <label>🛵 Captain — full pickup details</label>
+      <textarea id="puCaptMsg" rows="9" style="font-size:13px;line-height:1.5;">${escapeHtml(captMsg)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="puCaptCopy">📋 Copy Captain Message</button>
+        ${captUrl ? '<button class="btn btn-success btn-sm" id="puCaptOpen">💬 Open Captain WhatsApp</button>' : ''}
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+    </div>
+  `, { large:true, onOpen(m) {
+    $('#puCustCopy', m).onclick = () => psCopyTextarea(m, '#puCustMsg');
+    $('#puCaptCopy', m).onclick = () => psCopyTextarea(m, '#puCaptMsg');
+    if ($('#puCustOpen', m)) $('#puCustOpen', m).onclick = () => window.open(custUrl, '_blank');
+    if ($('#puCaptOpen', m)) $('#puCaptOpen', m).onclick = () => window.open(captUrl, '_blank');
+  }});
+}
+
+/* Send BOTH messages on assignment (each wa.me chat opens with text pre-filled).
+   If a browser blocks the 2nd popup, a panel with both previews + one-click
+   buttons appears — nothing is ever silently lost. */
+function sendPickupNotifications(requestId, driverId, opts) {
+  opts = opts || {};
+  const req = DB.get('pickupRequests', requestId);
+  const driver = DB.get('drivers', driverId) || {};
+  if (!req) return { captain:'missing', customer:'missing' };
+  const toCaptain = opts.toCaptain !== false;
+  const toCustomer = opts.toCustomer !== false;
+  const res = { captain:'skipped', customer:'skipped' };
+  const problems = [];
+
+  function openOne(kind, url, label) {
+    if (!url) {
+      res[kind] = 'no-number';
+      problems.push(label + ' ka WhatsApp number saved nahi hai');
+      return;
+    }
+    let opened = null;
+    try { opened = window.open(url, '_blank'); } catch (e) {}
+    if (!opened) {
+      res[kind] = 'blocked';
+      problems.push(label + ' ka WhatsApp tab block ho gaya');
+    } else {
+      res[kind] = 'opened';
+      try {
+        if (typeof logAction === 'function')
+          logAction('pickup.' + kind + 'WhatsApp', (driver.name || '') + ' / ' + (req.customerName || ''));
+      } catch (e) {}
+    }
+  }
+  if (toCaptain) openOne('captain', captainWaUrl(req, driver), 'Captain');
+  if (toCustomer) openOne('customer', customerWaUrl(req, driver), 'Customer');
+
+  if (problems.length) {
+    openPickupNotifyPanel(requestId, driverId, problems.join(' • '));
+  } else {
+    const who = (toCaptain && toCustomer) ? 'Captain + Customer'
+      : (toCaptain ? 'Captain' : 'Customer');
+    toast('✅ ' + who + ' ko WhatsApp messages bhej diye gaye — Send dabayein', 'success');
+  }
+  return res;
+}
+function sendCustomerWhatsApp(requestId, driverId) {
+  return sendPickupNotifications(requestId, driverId, { toCaptain:false });
+}
+
 function renderDelivery() {
   const requests = DB.all('pickupRequests');
   const drivers = DB.all('drivers');
@@ -62,12 +279,14 @@ function renderRequestsTab() {
             <td><b>#${r.id.slice(-6).toUpperCase()}</b></td>
             <td><b>${escapeHtml(r.customerName)}</b><br><small style="color:var(--text-soft);">${escapeHtml(r.customerPhone)}</small></td>
             <td style="font-size:12px;">${escapeHtml(r.address)}</td>
-            <td><b>${escapeHtml(r.pickupDate||'-')}</b><br><small>${escapeHtml(r.pickupSlot||'-')}</small></td>
+            <td><b>${escapeHtml(r.pickupDate||'-')}</b><br><small>${escapeHtml((typeof formatPickupSlot==='function') ? formatPickupSlot(r.pickupSlot) : (r.pickupSlot||'-'))}</small></td>
             <td>${r.driverId ? '🛵 '+escapeHtml((drivers.find(d=>d.id===r.driverId)||{}).name||'-') : '<span style="color:var(--text-soft);">Not assigned</span>'}</td>
             <td><span class="badge ${statusColors[r.status]||'pending'}">${r.status}</span></td>
             <td>${r.rating?('⭐'.repeat(r.rating)):'-'}</td>
             <td style="white-space:nowrap;">
               ${r.status === 'pending' ? `<button class="btn btn-success btn-sm" data-act="assign" data-id="${r.id}">👨‍✈️ Assign</button>` : ''}
+              ${r.driverId ? `<button class="btn btn-secondary btn-sm" data-act="captain" data-id="${r.id}" title="Resend full pickup details to the captain on WhatsApp">📱 Captain</button>` : ''}
+              ${r.driverId ? `<button class="btn btn-secondary btn-sm" data-act="customer" data-id="${r.id}" title="Send pickup confirmation + captain details to the customer">📱 Customer</button>` : ''}
               ${r.status === 'assigned' ? `<button class="btn btn-primary btn-sm" data-act="pickup" data-id="${r.id}">📦 Mark Picked Up</button>` : ''}
               ${r.status === 'picked' ? `<button class="btn btn-success btn-sm" data-act="deliver" data-id="${r.id}">✅ Complete</button>` : ''}
               <button class="btn btn-secondary btn-sm" data-act="edit" data-id="${r.id}">✏️</button>
@@ -83,6 +302,8 @@ function renderRequestsTab() {
     const id = b.dataset.id;
     const act = b.dataset.act;
     if (act === 'assign') openAssignDriverDialog(id);
+    else if (act === 'captain') { const r = DB.get('pickupRequests', id); if (r) sendCaptainWhatsApp(id, r.driverId); }
+    else if (act === 'customer') { const r = DB.get('pickupRequests', id); if (r) sendCustomerWhatsApp(id, r.driverId); }
     else if (act === 'pickup') updateRequestStatus(id, 'picked');
     else if (act === 'deliver') openCompleteDeliveryDialog(id);
     else if (act === 'edit') openPickupRequestForm(DB.get('pickupRequests', id));
@@ -138,7 +359,11 @@ function renderDriversTab() {
 }
 
 function openPickupRequestForm(existing) {
-  const r = existing || { customerName:'', customerPhone:'', address:'', pickupDate: isoDay(new Date(Date.now()+86400000)), pickupSlot:'10am-2pm', notes:'', status:'pending' };
+  const allSlots = (typeof generatePickupSlots === 'function') ? generatePickupSlots() : [];
+  const r = existing || { customerName:'', customerPhone:'', address:'', pickupDate: isoDay(new Date(Date.now()+86400000)), pickupSlot:(allSlots[0]||{}).value||'', notes:'', status:'pending' };
+  const slotOptions = allSlots.map(sl => `<option value="${sl.value}" ${r.pickupSlot===sl.value?'selected':''}>⏰ ${escapeHtml(sl.label)}</option>`).join('');
+  const legacySlot = (r.pickupSlot && typeof formatPickupSlot === 'function' && !allSlots.some(sl => sl.value === r.pickupSlot))
+    ? `<option value="${escapeHtml(r.pickupSlot)}" selected>⚠️ ${escapeHtml(formatPickupSlot(r.pickupSlot))} (old)</option>` : '';
   openModal(`
     <h3>${existing?'Edit':'+ New'} Pickup Request</h3>
     <div class="form-row">
@@ -151,12 +376,8 @@ function openPickupRequestForm(existing) {
     <div class="form-row">
       <div class="field"><label>Pickup Date *</label><input type="date" id="rDate" value="${r.pickupDate}"/></div>
       <div class="field"><label>Time Slot</label>
-        <select id="rSlot">
-          <option value="9am-12pm" ${r.pickupSlot==='9am-12pm'?'selected':''}>🌅 9 AM - 12 PM</option>
-          <option value="10am-2pm" ${r.pickupSlot==='10am-2pm'?'selected':''}>☀️ 10 AM - 2 PM</option>
-          <option value="2pm-6pm" ${r.pickupSlot==='2pm-6pm'?'selected':''}>🌞 2 PM - 6 PM</option>
-          <option value="6pm-9pm" ${r.pickupSlot==='6pm-9pm'?'selected':''}>🌆 6 PM - 9 PM</option>
-        </select>
+        <select id="rSlot">${legacySlot}${slotOptions}</select>
+        <small style="color:var(--text-soft);">Non-overlapping slots • portal par har slot sirf 1 customer book kar sakta hai.</small>
       </div>
     </div>
     <div class="form-row cols-1">
@@ -234,8 +455,19 @@ function openAssignDriverDialog(requestId) {
   if (!drivers.length) { toast('Add a driver first', 'error'); return; }
 
   openModal(`
-    <h3>👨‍✈️ Assign Driver</h3>
+    <h3>👨‍✈️ Assign Captain / Driver</h3>
     <p class="sub">Pick a driver for this pickup request.</p>
+    <div style="background:#dcfce7;border-left:4px solid #16a34a;padding:10px 12px;border-radius:8px;font-size:12.5px;line-height:1.55;margin-bottom:12px;">
+      📱 Assign karte hi <b>2 WhatsApp messages</b> apne aap ready ho jayenge:<br>
+      🛵 <b>Captain:</b> customer ka naam, number, address, date, slot, notes<br>
+      👤 <b>Customer:</b> pickup confirmation + captain ka naam/number + time slot
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:700;cursor:pointer;">
+        <input type="checkbox" id="assignWaChk" checked/> 📱 Captain ko full details bhejein
+      </label>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:4px;font-weight:700;cursor:pointer;">
+        <input type="checkbox" id="assignWaCustomer" checked/> 📱 Customer ko confirmation bhejein
+      </label>
+    </div>
     <div style="display:flex;flex-direction:column;gap:8px;">
       ${drivers.map(d => `
         <label style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;">
@@ -260,8 +492,13 @@ function openAssignDriverDialog(requestId) {
         status: 'assigned',
         assignedAt: new Date().toISOString()
       });
+      const wantCaptain  = m.querySelector('#assignWaChk') ? m.querySelector('#assignWaChk').checked : true;
+      const wantCustomer = m.querySelector('#assignWaCustomer') ? m.querySelector('#assignWaCustomer').checked : true;
       closeModal(); toast('Driver assigned', 'success');
       if (typeof logAction === 'function') logAction('pickup.assign', requestId);
+      if (wantCaptain || wantCustomer) {
+        sendPickupNotifications(requestId, sel.value, { toCaptain: wantCaptain, toCustomer: wantCustomer });
+      }
       renderDelivery();
     };
   }});

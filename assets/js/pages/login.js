@@ -250,6 +250,12 @@ function renderLogin() {
   appEl.innerHTML = html;
   appEl.classList.add('lg-mounted');
 
+  /* Auto holiday theme: 4 days before + on the occasion itself.
+     No-ops on ordinary days, so the normal brand login is untouched. */
+  if (typeof HT !== 'undefined' && HT.decorateLogin) {
+    try { HT.decorateLogin(appEl); } catch (e) {}
+  }
+
   /* ---- password visibility ---- */
   const passEl = $('#lgPass');
   const eyeEl = $('#lgEye');

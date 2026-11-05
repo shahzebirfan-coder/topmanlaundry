@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mr-laundry-pos-v29';
+const CACHE_NAME = 'mr-laundry-pos-v33';
 const urlsToCache = [
   './',
   './index.html',
@@ -6,7 +6,11 @@ const urlsToCache = [
   './assets/css/responsive.css',
   './assets/css/boot.css',
   './assets/css/expenses.css',
+  './assets/css/holiday-themes.css',
   './assets/img/logo.jpeg',
+  './assets/img/holidays/iqbal-1935.jpg',
+  './assets/img/holidays/iqbal-profile.jpg',
+  './assets/img/holidays/jinnah-1945.jpg',
   './assets/js/app.js',
   './assets/js/auth-recovery.js',
   './assets/js/it-core.js',
@@ -16,9 +20,11 @@ const urlsToCache = [
   './assets/js/components.js',
   './assets/js/it-owner.js',
   './assets/js/portal-payments.js',
+  './assets/js/pickup-slots.js',
   './assets/js/db.js',
   './assets/js/extras.js',
   './assets/js/gdrive.js',
+  './assets/js/holiday-themes.js',
   './assets/js/i18n.js',
   './assets/js/inventory-auto.js',
   './assets/js/marketing.js',

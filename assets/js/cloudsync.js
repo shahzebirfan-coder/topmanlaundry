@@ -374,6 +374,25 @@ const CLOUD = {
       const tableMeta = {};
       let totalSize = 0;
 
+      /* portal.html appends pickup bookings with its own atomic transaction.
+         Merge by id before pushing so a stale local copy can never erase a
+         booking another customer made a second ago (which would allow a
+         double-booked slot). */
+      if (Array.isArray(data.pickupRequests)) {
+        try {
+          const remoteDoc = await tablesRef.doc('pickupRequests').get();
+          if (remoteDoc && remoteDoc.exists) {
+            const remoteRows = JSON.parse(remoteDoc.data().data || '[]');
+            if (Array.isArray(remoteRows)) {
+              const byId = new Map();
+              remoteRows.forEach(r => { if (r && r.id) byId.set(r.id, r); });
+              data.pickupRequests.forEach(r => { if (r && r.id) byId.set(r.id, r); });
+              data.pickupRequests = Array.from(byId.values());
+            }
+          }
+        } catch (e) {}
+      }
+
       // Write each table — single doc OR chunked
       for (const tbl of Object.keys(data)) {
         const json = JSON.stringify(data[tbl] ?? null);

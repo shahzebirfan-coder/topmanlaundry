@@ -149,6 +149,7 @@ function renderLayout(activePage, contentHtml) {
               </div>
             ` : ''}
             ${(typeof cloudSyncPillHtml === 'function') ? cloudSyncPillHtml() : ''}
+            ${(typeof HT !== 'undefined' && HT.topbarBadgeHtml) ? HT.topbarBadgeHtml() : ''}
             <div class="user-chip">
               <div class="avatar">${user.name.charAt(0).toUpperCase()}</div>
               <div>

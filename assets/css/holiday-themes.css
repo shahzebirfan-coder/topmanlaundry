@@ -1,0 +1,372 @@
+/* ============================================================
+   HOLIDAY THEMES — login screen, POS badge, customer portal
+   All rules are scoped so the normal app UI is untouched.
+   Colours come from --ht-* variables set inline by
+   assets/js/holiday-themes.js (one palette per occasion).
+   ============================================================ */
+
+.ht-themed {
+  --ht-deep:#063a2b; --ht-mid:#0d6b4b; --ht-accent:#e3b955;
+  --ht-glow:#f7e7b7; --ht-soft:#e9f4ed; --ht-ink:#082b21;
+  --ht-ring:rgba(13,107,75,.16);
+}
+
+/* ---------------- LOGIN : themed hero ---------------- */
+.lg-root.ht-themed .lg-hero { background: var(--ht-mid); }
+
+.lg-root.ht-themed .lg-hero-photo {
+  background-image:
+    radial-gradient(760px 620px at 82% 24%, var(--ht-glow) 0%, transparent 68%),
+    radial-gradient(620px 620px at 12% 94%, var(--ht-soft) 0%, transparent 72%),
+    linear-gradient(135deg, var(--ht-soft) 0%, var(--ht-glow) 44%, var(--ht-mid) 100%);
+}
+.lg-root.ht-themed .lg-hero-photo::after {
+  content: ''; position: absolute; inset: 0; opacity: .2; pointer-events: none;
+  background-image:
+    radial-gradient(circle at 18% 24%, var(--ht-deep) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 68% 18%, var(--ht-deep) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 88% 70%, var(--ht-deep) 0 1.5px, transparent 2px);
+  background-size: 46px 46px, 64px 64px, 38px 38px;
+}
+.lg-root.ht-themed .lg-hero-veil {
+  background:
+    linear-gradient(90deg, var(--ht-soft) 0%, rgba(255,255,255,.93) 24%, rgba(255,255,255,.62) 48%, rgba(255,255,255,.10) 76%, rgba(255,255,255,0) 100%),
+    linear-gradient(0deg, rgba(255,255,255,.35) 0%, transparent 32%);
+}
+.lg-root.ht-themed .lg-mark,
+.lg-root.ht-themed .lg-wm-accent,
+.lg-root.ht-themed .lg-headline-accent { color: var(--ht-mid); }
+.lg-root.ht-themed .lg-wm-base,
+.lg-root.ht-themed .lg-headline { color: var(--ht-deep); }
+.lg-root.ht-themed .lg-brand-tag,
+.lg-root.ht-themed .lg-subcopy { color: var(--ht-ink); opacity: .78; }
+.lg-root.ht-themed .lg-script { color: var(--ht-mid); opacity: .5; }
+.lg-root.ht-themed .lg-band { background: var(--ht-deep); }
+.lg-root.ht-themed .lg-wave path { fill: var(--ht-deep); }
+.lg-root.ht-themed .lg-band-ico { color: var(--ht-accent); }
+.lg-root.ht-themed .lg-hero-claim { color: var(--ht-deep); }
+.lg-root.ht-themed .lg-hero-claim em { background: var(--ht-mid); }
+
+/* Sign-in panel + card accents */
+.lg-root.ht-themed .lg-panel {
+  background: linear-gradient(160deg, var(--ht-soft) 0%, var(--ht-glow) 58%, var(--ht-soft) 100%);
+}
+.lg-root.ht-themed .lg-card { border-top: 4px solid var(--ht-accent); }
+.lg-root.ht-themed .lg-card-brand { margin-bottom: 20px; }
+.lg-root.ht-themed .lg-title { color: var(--ht-deep); }
+.lg-root.ht-themed .lg-input:focus-within {
+  border-color: var(--ht-mid); box-shadow: 0 0 0 4px var(--ht-ring);
+}
+.lg-root.ht-themed .lg-submit {
+  background: linear-gradient(135deg, var(--ht-mid), var(--ht-deep));
+  box-shadow: 0 8px 20px var(--ht-ring);
+}
+.lg-root.ht-themed .lg-submit:hover { filter: brightness(1.08); }
+.lg-root.ht-themed .lg-support-phone { color: var(--ht-mid); }
+.lg-root.ht-themed .lg-mobile-band .lg-band-ico { color: var(--ht-mid); }
+.lg-root.ht-themed .lg-hero-body { padding-top: 4vh; }
+.lg-root.ht-themed .lg-features { margin-top: 22px; }
+
+/* ---------------- HERO HOLIDAY CARD ---------------- */
+.ht-panel {
+  position: relative; overflow: hidden;
+  width: 100%; max-width: 470px; margin-top: 22px;
+  padding: 18px 20px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--ht-deep) 0%, var(--ht-mid) 72%, var(--ht-mid) 100%);
+  color: #fff;
+  box-shadow: 0 18px 40px rgba(4,30,22,.26), inset 0 0 0 1px rgba(255,255,255,.14);
+  font-family: 'Inter','Segoe UI',Tahoma,sans-serif;
+}
+.ht-panel::before {
+  content: ''; position: absolute; inset: 0; opacity: .16; pointer-events: none;
+  background:
+    radial-gradient(circle at 92% 12%, var(--ht-accent) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 62%, #fff 0 1.5px, transparent 2.5px),
+    radial-gradient(circle at 96% 78%, var(--ht-glow) 0 2px, transparent 3px);
+  background-size: 70px 70px, 48px 48px, 90px 90px;
+}
+.ht-panel.is-festive::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px;
+  background: repeating-linear-gradient(90deg, var(--ht-accent) 0 14px, transparent 14px 28px);
+  opacity: .85;
+}
+.ht-panel-art {
+  position: absolute; right: -34px; bottom: -46px; width: 230px; height: 230px;
+  color: var(--ht-accent); opacity: .16; pointer-events: none;
+  animation: ht-float 9s ease-in-out infinite;
+}
+.ht-art-svg { width: 100%; height: 100%; display: block; }
+@keyframes ht-float { 0%,100%{transform:translateY(0) rotate(-4deg)} 50%{transform:translateY(-10px) rotate(2deg)} }
+
+.ht-panel-top { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ht-kicker {
+  font-size: 9.5px; letter-spacing: .16em; font-weight: 800; text-transform: uppercase;
+  color: var(--ht-accent); white-space: nowrap;
+}
+.ht-count {
+  font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 20px;
+  background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+  white-space: nowrap;
+}
+.ht-count.is-today { background: var(--ht-accent); color: var(--ht-deep); border-color: var(--ht-accent); }
+.ht-emoji { position: relative; font-size: 30px; line-height: 1; margin-top: 10px; }
+.ht-title { position: relative; margin: 4px 0 0; font-size: clamp(21px,2.2vw,29px); font-weight: 800; letter-spacing: -.4px; }
+.ht-urdu {
+  position: relative; font-family: 'Noto Nastaliq Urdu','Noto Naskh Arabic',serif;
+  font-size: 16px; line-height: 2; color: var(--ht-accent); margin: 1px 0 4px;
+}
+.ht-date { position: relative; font-size: 12px; font-weight: 700; opacity: .95; margin-top: 3px; }
+.ht-info { position: relative; font-size: 12px; line-height: 1.6; margin: 9px 0 0; opacity: .92; }
+.ht-ops {
+  position: relative; font-size: 11px; line-height: 1.5; margin-top: 10px;
+  padding: 7px 10px; border-radius: 9px; background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.14);
+}
+.ht-tentative, .ht-previewtag {
+  position: relative; font-size: 10.5px; line-height: 1.5; margin-top: 8px; color: var(--ht-glow); opacity: .95;
+}
+.ht-previewtag { color: #fff; font-weight: 700; }
+.ht-panel.is-compact { max-width: none; margin-top: 0; padding: 16px 18px; }
+.ht-panel.is-compact .ht-panel-art { width: 180px; height: 180px; right: -30px; bottom: -40px; }
+.ht-panel.is-compact .ht-title { font-size: 23px; }
+.ht-panel.is-compact .ht-emoji { font-size: 26px; }
+
+/* ---------------- SIGN-IN RIBBON (also visible on mobile) ---------------- */
+.ht-ribbon {
+  width: 100%; max-width: 432px; margin: 0 0 16px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--ht-deep), var(--ht-mid));
+  color: #fff; box-shadow: 0 8px 22px var(--ht-ring);
+  border: 1px solid rgba(255,255,255,.16);
+  font-family: 'Inter','Segoe UI',Tahoma,sans-serif;
+}
+.ht-ribbon-emoji { font-size: 20px; line-height: 1; flex: 0 0 auto; }
+.ht-ribbon-txt { flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 1.35; }
+.ht-ribbon-txt b { font-weight: 800; }
+.ht-ribbon-txt span { opacity: .88; font-size: 11px; }
+.ht-ribbon-info {
+  flex: 0 0 auto; width: 24px; height: 24px; border: 0; cursor: pointer;
+  border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 14px; line-height: 1;
+}
+.ht-ribbon-info:hover { background: var(--ht-accent); color: var(--ht-deep); }
+
+/* ---------------- POS TOPBAR BADGE ---------------- */
+.ht-topbar-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 30px; cursor: pointer;
+  background: linear-gradient(135deg, var(--ht-deep), var(--ht-mid));
+  color: #fff; border: 1px solid rgba(255,255,255,.18);
+  font-size: 12px; font-weight: 800; white-space: nowrap;
+  box-shadow: 0 3px 10px var(--ht-ring);
+}
+.ht-topbar-badge:hover { filter: brightness(1.1); }
+.ht-topbar-txt { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------------- CUSTOMER PORTAL BANNER ---------------- */
+#htPortalBanner { width: 100%; max-width: 720px; margin: 0 auto 14px; padding: 0 14px; box-sizing: border-box; }
+#htPortalBanner:empty { display: none; }
+.ht-portal-banner {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 40px 12px 16px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--ht-deep), var(--ht-mid));
+  color: #fff; box-shadow: 0 10px 26px rgba(3,26,19,.22);
+  border: 1px solid rgba(255,255,255,.16);
+  font-family: 'Inter','Segoe UI',Tahoma,sans-serif;
+}
+.ht-portal-art {
+  position: absolute; right: 26px; top: -34px; width: 110px; height: 110px;
+  color: var(--ht-accent); opacity: .2; pointer-events: none;
+}
+.ht-portal-body { flex: 1 1 auto; min-width: 0; position: relative; }
+.ht-portal-line1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.ht-portal-emoji { font-size: 20px; }
+.ht-portal-count {
+  font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px;
+  background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.25);
+}
+.ht-portal-line2 { font-size: 11.5px; opacity: .9; margin-top: 4px; line-height: 1.45; }
+.ht-portal-x {
+  position: absolute; right: 8px; top: 8px; width: 22px; height: 22px;
+  border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(255,255,255,.16); color: #fff; font-size: 12px; line-height: 1;
+}
+.ht-portal-x:hover { background: var(--ht-accent); color: var(--ht-deep); }
+
+/* ---------------- SETTINGS DIALOG ---------------- */
+.ht-preview {
+  border-radius: 16px; padding: 4px; margin: 12px 0 16px;
+  background: linear-gradient(135deg, var(--ht-soft), var(--ht-glow));
+  border: 1px solid rgba(0,0,0,.06);
+}
+.ht-preview .ht-panel { box-shadow: 0 8px 22px rgba(4,30,22,.16); }
+.ht-nothing { padding: 18px; text-align: center; font-size: 12.5px; color: #556; }
+.ht-admin-controls {
+  padding: 12px 14px; border-radius: 12px; background: #f6f9fb;
+  border: 1px solid #e3ebf0; margin-bottom: 14px;
+}
+.ht-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.ht-admin-inline { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 10px 0 6px; font-size: 12.5px; }
+.ht-admin-inline input[type="number"], .ht-custom-form input, .ht-custom-form select,
+.ht-admin-row input[type="date"], .ht-sel {
+  border: 1.5px solid #d9e3ea; border-radius: 8px; padding: 7px 9px;
+  font-size: 12.5px; background: #fff; color: #1a2b3c;
+}
+.ht-admin-head { font-weight: 800; font-size: 13px; margin: 16px 0 8px; color: #25384a; }
+.ht-sel { width: 100%; }
+.ht-admin-list { border: 1px solid #e3ebf0; border-radius: 12px; overflow: hidden; }
+.ht-admin-scroll { max-height: 270px; overflow-y: auto; }
+.ht-admin-row {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  border-bottom: 1px solid #eef3f6; background: #fff; font-size: 12.5px;
+}
+.ht-admin-row:last-child { border-bottom: 0; }
+.ht-admin-chk { display: flex; align-items: center; }
+.ht-admin-emoji { font-size: 18px; width: 24px; text-align: center; flex: 0 0 24px; }
+.ht-admin-row-main { flex: 1 1 auto; min-width: 0; line-height: 1.35; }
+.ht-admin-row-main small { display: block; font-size: 10.5px; color: #6c8292; }
+.ht-admin-row input[type="date"] { width: 140px; flex: 0 0 140px; padding: 5px 7px; font-size: 11px; }
+.ht-tag {
+  display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .03em;
+  padding: 2px 6px; border-radius: 10px; background: #eaf4ee; color: #176b4b; margin-left: 4px;
+}
+.ht-tag-moon { background: #fff5dd; color: #946a10; }
+.ht-tag-custom { background: #e9edfb; color: #3f51a3; }
+.ht-custom-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.ht-custom-form #htCName { flex: 1 1 200px; min-width: 160px; }
+.ht-custom-form select { flex: 0 0 150px; }
+#htCustomList:empty { display: none; }
+#htCustomList > small { display: block; padding: 10px; }
+.ht-up-list { border: 1px solid #e5edf2; border-radius: 12px; overflow: hidden; }
+.ht-up-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border-bottom: 1px solid #eef3f6; font-size: 12.5px;
+}
+.ht-up-row:last-child { border-bottom: 0; }
+.ht-up-row > div { flex: 1 1 auto; }
+.ht-up-row small { display: block; font-size: 10.5px; color: #6c8292; }
+.ht-up-emoji { font-size: 18px; }
+.ht-up-when { font-size: 11px; font-weight: 800; color: #176b4b; white-space: nowrap; }
+
+/* ============================================================
+   PERSONALITY PICTURES (Iqbal Day / Quaid-e-Azam Day)
+   ============================================================ */
+
+/* A soft, faded archival portrait on the RIGHT side of the login hero —
+   the "unki side p ek picture" look. Purely decorative, offline. */
+.lg-root.ht-themed.has-person .lg-hero-photo::before {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 46%;
+  background-image: var(--ht-portrait);
+  background-size: cover; background-position: 50% 14%; background-repeat: no-repeat;
+  opacity: .22; filter: grayscale(.55) sepia(.22) contrast(1.05);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 58%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 58%);
+  pointer-events: none;
+}
+
+/* Card becomes a two-column layout: details left, framed portrait right */
+.ht-panel.has-portrait { max-width: 600px; display: flex; align-items: stretch; gap: 14px; }
+.ht-panel-main { flex: 1 1 auto; min-width: 0; position: relative; z-index: 2; }
+.ht-portrait {
+  flex: 0 0 128px; position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  justify-content: flex-start; padding-top: 2px;
+}
+.ht-portrait-frame {
+  width: 118px; height: 150px; overflow: hidden;
+  border: 2px solid var(--ht-accent);
+  border-radius: 999px 999px 14px 14px / 130px 130px 14px 14px;
+  box-shadow: 0 12px 26px rgba(0,0,0,.3), inset 0 0 0 4px rgba(255,255,255,.12);
+  background: rgba(255,255,255,.08);
+}
+.ht-portrait-frame img {
+  display: block; width: 100%; height: 100%;
+  object-fit: cover; object-position: 50% 12%;
+  filter: grayscale(.18) sepia(.12) contrast(1.05);
+}
+.ht-portrait-name {
+  font-size: 10.5px; font-weight: 800; line-height: 1.3; margin-top: 9px; color: #fff;
+}
+.ht-portrait-years {
+  font-size: 9.5px; font-weight: 800; letter-spacing: .12em; margin-top: 2px;
+  color: var(--ht-accent);
+}
+
+/* Short biography / extra details under the info paragraph */
+.ht-person {
+  position: relative; margin-top: 10px; padding: 9px 11px; border-radius: 10px;
+  background: rgba(255,255,255,.10); border-left: 3px solid var(--ht-accent);
+}
+.ht-person-role { font-size: 10.5px; font-weight: 800; color: var(--ht-accent); line-height: 1.4; }
+.ht-person p { font-size: 11px; line-height: 1.55; margin: 5px 0 0; opacity: .93; }
+
+/* Sign-in ribbon: thumbnail + date + short detail (also visible on mobile) */
+.ht-ribbon.has-portrait { align-items: flex-start; gap: 10px; padding: 9px 10px; }
+.ht-ribbon-pic {
+  width: 46px; height: 56px; flex: 0 0 46px; position: relative; z-index: 1;
+  object-fit: cover; object-position: 50% 12%;
+  border-radius: 24px 24px 8px 8px / 30px 30px 8px 8px;
+  border: 1.5px solid var(--ht-accent); background: rgba(255,255,255,.12);
+}
+.ht-ribbon-txt .ht-ribbon-l1 { display: block; font-size: 12px; opacity: 1; }
+.ht-ribbon-txt .ht-ribbon-l1 span { opacity: .88; font-size: 11px; }
+.ht-ribbon-txt .ht-ribbon-l2 {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: 10.5px; opacity: .88; line-height: 1.45; margin-top: 3px;
+}
+
+/* Customer portal banner thumbnail */
+.ht-portal-pic {
+  width: 46px; height: 56px; flex: 0 0 46px; position: relative; z-index: 1;
+  object-fit: cover; object-position: 50% 12%;
+  border-radius: 24px 24px 8px 8px / 30px 30px 8px 8px;
+  border: 1.5px solid var(--ht-accent); background: rgba(255,255,255,.12);
+}
+
+/* Admin: picture picker rows */
+.ht-pic-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-bottom: 1px solid #eef3f6; background: #fff; flex-wrap: wrap;
+}
+.ht-pic-row:last-child { border-bottom: 0; }
+.ht-pic-thumb {
+  width: 42px; height: 54px; flex: 0 0 42px; object-fit: cover; object-position: 50% 12%;
+  border-radius: 22px 22px 8px 8px / 28px 28px 8px 8px;
+  border: 1.5px solid #d8b45a; background: #eef2f4;
+}
+.ht-pic-main { flex: 1 1 200px; min-width: 0; }
+.ht-pic-main b { font-size: 12.5px; }
+.ht-pic-main small { display: block; font-size: 10.5px; color: #6c8292; margin: 2px 0 5px; }
+.ht-pic-main input {
+  width: 100%; border: 1.5px solid #d9e3ea; border-radius: 8px;
+  padding: 6px 8px; font-size: 11.5px; background: #fff; color: #1a2b3c;
+}
+.ht-pic-upload, .ht-pic-reset, .ht-pic-alt { flex: 0 0 auto; white-space: nowrap; }
+
+/* Compact preview inside dialogs */
+.ht-panel.is-compact.has-portrait .ht-portrait { flex-basis: 112px; }
+.ht-panel.is-compact.has-portrait .ht-portrait-frame { width: 104px; height: 132px; }
+
+/* ---------------- responsive ---------------- */
+@media (max-width: 1100px) {
+  .ht-panel.has-portrait { max-width: 100%; }
+  .ht-portrait { flex-basis: 106px; }
+  .ht-portrait-frame { width: 98px; height: 128px; }
+}
+@media (max-width: 900px) {
+  .lg-root.ht-themed .lg-hero-body { padding-top: 4vh; }
+  .ht-ribbon-txt .ht-ribbon-l2 { -webkit-line-clamp: 3; }
+  .ht-topbar-txt { max-width: 110px; }
+  .ht-portal-banner { padding-right: 34px; }
+}
+@media (max-width: 520px) {
+  .ht-topbar-txt { display: none; }
+  .ht-admin-row input[type="date"] { width: 118px; flex-basis: 118px; }
+  .ht-admin-row-main small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ht-custom-form select { flex: 1 1 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ht-panel-art { animation: none; }
+}

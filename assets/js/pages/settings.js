@@ -138,6 +138,13 @@ function renderSettings() {
         </div>
 
         <div class="card" style="margin-bottom:20px;">
+          <div class="card-header"><h3>🎉 Holiday Themes / تہوار تھیم</h3></div>
+          <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">Pakistan ke gazetted holidays aur Eid par login screen apne aap event ki theme mein badal jati hai — event se 4 din pehle se le kar event tak. Dates, lead days aur apne custom events yahan se manage karein.</p>
+          <button class="btn btn-primary btn-block" id="openHolidayBtn">🎉 Configure Holiday Themes</button>
+          <div id="holidayStatus" style="font-size:11px;color:var(--text-soft);margin-top:8px;text-align:center;"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;">
           <div class="card-header"><h3>📱 WhatsApp Templates</h3></div>
           <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">Customize auto-prompted messages sent when order status changes.</p>
           <button class="btn btn-primary btn-block" id="openWaTplBtn">📱 Customize WhatsApp Templates</button>
@@ -292,6 +299,18 @@ function renderSettings() {
   $('#openInvCustBtn').onclick = () => openInvoiceCustomizer();
   if ($('#openPortalCfg')) $('#openPortalCfg').onclick = () => openPortalConfigDialog();
   if ($('#openQRBtn')) $('#openQRBtn').onclick = () => openQRMenuPoster();
+  if ($('#openHolidayBtn')) $('#openHolidayBtn').onclick = () => {
+    if (typeof HT !== 'undefined' && HT.openDialog) HT.openDialog();
+    else toast('Holiday themes module load nahi hua — Ctrl+F5 karein', 'error');
+  };
+  if ($('#holidayStatus')) {
+    try {
+      const live = (typeof HT !== 'undefined' && HT.state) ? HT.state() : null;
+      $('#holidayStatus').innerHTML = live
+        ? `🎨 Active: <b>${escapeHtml(live.ev.name)}</b> · ${escapeHtml(live.leadLabel)}`
+        : '⚪ Abhi koi upcoming event nahi';
+    } catch (e) {}
+  }
   if ($('#openARBtn')) $('#openARBtn').onclick = () => openAutoReplyEditor();
   if ($('#checkStorageBtn')) $('#checkStorageBtn').onclick = () => showStorageStatus();
   if ($('#openWaTplBtn'))  $('#openWaTplBtn').onclick  = () => openWhatsAppTemplateEditor();

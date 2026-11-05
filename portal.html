@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css" />
   <link rel="stylesheet" href="assets/css/responsive.css" />
+  <link rel="stylesheet" href="assets/css/holiday-themes.css?v=20261104.14" />
   <link rel="icon" href="assets/img/logo.jpeg" />
   <meta name="theme-color" content="#4f7cff"/>
   <style>
@@ -766,6 +767,9 @@
         <p>📦 <span data-i18n="track_orders">Track your order status anytime, anywhere</span></p>
       </div>
 
+      <!-- Upcoming Pakistan holiday notice (auto, offline) -->
+      <div id="htPortalBanner"></div>
+
       <div class="portal-card" style="padding:16px;">
         <div class="quick-actions">
           <a href="reviews.html" class="quick-action qa-reviews">
@@ -830,7 +834,9 @@
   <script src="assets/js/it-owner.js?v=20261104.5"></script>
   <script src="assets/js/db.js?v=20261104.6"></script>
   <script src="assets/js/utils.js"></script>
-  <script src="assets/js/portal-helpers.js?v=20261104.7"></script>
+  <script src="assets/js/holiday-themes.js?v=20261104.14"></script>
+  <script src="assets/js/portal-helpers.js?v=20261104.12"></script>
+  <script src="assets/js/pickup-slots.js?v=20261104.11"></script>
   <!-- Built-in Firebase config + Shop ID (shared by every page) -->
   <script src="assets/js/cloud-autoconfig.js?v=20261104.1"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -888,7 +894,7 @@
         if (!meta.tables) return;
         
         const tablesRef = fdb().collection('shops').doc(SHOP_ID).collection('tables');
-        const tablesToFetch = ['orders', 'customers', 'products', 'settings'];
+        const tablesToFetch = ['orders', 'customers', 'products', 'settings', 'pickupRequests'];
         
         let fetched = {};
         for (const tbl of tablesToFetch) {
@@ -910,6 +916,7 @@
         if (fetched.orders) DB._data.orders = fetched.orders;
         if (fetched.customers) DB._data.customers = fetched.customers;
         if (fetched.products) DB._data.products = fetched.products;
+        if (fetched.pickupRequests) DB._data.pickupRequests = fetched.pickupRequests;
         if (fetched.settings) {
            DB._data.settings = Object.assign({}, DB._data.settings, fetched.settings);
            if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(DB._data);
@@ -973,6 +980,18 @@
             }
           }
           
+          /* ONE CUSTOMER PER SLOT — checked INSIDE the transaction so two
+             customers tapping at the same second cannot both get the slot. */
+          const clash = (typeof psSlotKey === 'function')
+            ? currentData.some(function (r) {
+                return r && !r._deleted && r.status !== 'cancelled'
+                  && String(r.pickupDate) === String(req.pickupDate)
+                  && String(r.pickupSlot) === String(req.pickupSlot);
+              })
+            : false;
+          if (clash) { window.__pickupSlotTaken = true; return; }
+          window.__pickupSlotTaken = false;
+
           currentData.push(req);
           
           const str = JSON.stringify(currentData);
@@ -981,29 +1000,19 @@
           t.set(metaRef, meta, {merge: true});
           t.set(tablesRef.doc(tbl), { data: str });
         });
-        return true;
+        if (window.__pickupSlotTaken) return { ok:false, reason:'slot_taken' };
+        return { ok:true };
       } catch(e) {
         console.error("Failed to push pickup request to cloud", e);
-        return false;
+        return { ok:false, reason:'error', message: e.message };
       }
     }
 
     // Call immediately
     document.addEventListener('DOMContentLoaded', loadPortalData);
 
-    // Patch DB.insert for pickupRequests so it goes to cloud directly
-    if (typeof DB !== 'undefined') {
-      const origInsert = DB.insert.bind(DB);
-      DB.insert = function(table, rec) {
-        const res = origInsert(table, rec);
-        if (table === 'pickupRequests') {
-           pushPickupRequestToCloud(res).then(success => {
-              if(!success) alert('Failed to sync pickup request. Please contact shop.');
-           });
-        }
-        return res;
-      };
-    }
+    // NOTE: pickup requests are pushed explicitly by openPickupRequestPortal()
+    // with an ATOMIC one-booking-per-slot check, so DB.insert must not double-push.
   </script>
 
   <script>
@@ -1366,23 +1375,25 @@
     }
 
 
-    /* ===== Request Pickup from Portal ===== */
+    /* ===== Request Pickup from Portal — 2h lead + ONE booking per slot ===== */
     function openPickupRequestPortal() {
+      const cfg = psSettings();
+      const now = new Date();
+      const todayStr = psLocalDate(now);
+      const leadHours = Math.round(cfg.leadMinutes / 60);
+
       const html = '<h2>\u{1F69A} Request Home Pickup</h2>' +
         '<p style="color:#666;margin-bottom:14px;">Fill in your details and we will come pick up your laundry!</p>' +
+        '<div style="background:#ecfdf5;border-left:4px solid #10b981;padding:10px 12px;border-radius:8px;font-size:12.5px;line-height:1.55;margin-bottom:14px;">' +
+          '⏰ Sirf <b>' + leadHours + ' ghante baad</b> ke slots available hain. Har slot par <b>sirf 1 customer</b> book ho sakta hai, taake rider ek hi waqt par do jagah na jaye.' +
+        '</div>' +
         '<div class="field"><label>Your Name *</label><input id="pkpName" type="text"/></div>' +
         '<div class="field"><label>Phone *</label><input id="pkpPhone" type="tel" placeholder="03XX-XXXXXXX"/></div>' +
         '<div class="field"><label>Address *</label><textarea id="pkpAddr" rows="2" placeholder="House #, street, area..."></textarea></div>' +
         '<div class="form-row">' +
-        '  <div class="field"><label>Date *</label><input type="date" id="pkpDate"/></div>' +
-        '  <div class="field"><label>Time Slot</label>' +
-        '    <select id="pkpSlot">' +
-        '      <option value="9am-12pm">\u{1F305} 9 AM - 12 PM</option>' +
-        '      <option value="10am-2pm" selected>\u2600\uFE0F 10 AM - 2 PM</option>' +
-        '      <option value="2pm-6pm">\u{1F31E} 2 PM - 6 PM</option>' +
-        '      <option value="6pm-9pm">\u{1F306} 6 PM - 9 PM</option>' +
-        '    </select>' +
-        '  </div>' +
+        '  <div class="field"><label>Date *</label><input type="date" id="pkpDate" min="' + todayStr + '"/></div>' +
+        '  <div class="field"><label>Time Slot *</label><select id="pkpSlot"></select>' +
+        '    <small id="pkpSlotHelp" style="color:#64748b;font-size:11px;display:block;margin-top:4px;"></small></div>' +
         '</div>' +
         '<div class="field"><label>Notes (optional)</label><textarea id="pkpNotes" rows="2" placeholder="Apartment #, landmarks..."></textarea></div>' +
         '<div class="modal-footer">' +
@@ -1390,30 +1401,76 @@
         '  <button class="btn btn-success" id="pkpSubmit">\u{1F69A} Submit Request</button>' +
         '</div>';
       openPortalModal(html);
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      document.getElementById('pkpDate').value = tomorrow.toISOString().slice(0, 10);
-      document.getElementById('pkpSubmit').onclick = function() {
-        const name = document.getElementById('pkpName').value.trim();
-        const phone = document.getElementById('pkpPhone').value.trim();
-        const addr = document.getElementById('pkpAddr').value.trim();
-        if (!name || !phone || !addr) { alert('Please fill name, phone, and address'); return; }
-        try {
-          DB.insert('pickupRequests', {
-            customerName: name,
-            customerPhone: phone,
-            address: addr,
-            pickupDate: document.getElementById('pkpDate').value,
-            pickupSlot: document.getElementById('pkpSlot').value,
-            notes: document.getElementById('pkpNotes').value.trim(),
-            status: 'pending',
-            source: 'portal'
-          });
-          closeModal();
-          showPortalToast('\u2705 Pickup request submitted! Our driver will contact you soon.', 'success');
-        } catch (e) {
-          alert('Error: ' + e.message);
+
+      const dateEl   = document.getElementById('pkpDate');
+      const slotEl   = document.getElementById('pkpSlot');
+      const helpEl   = document.getElementById('pkpSlotHelp');
+      const submitEl = document.getElementById('pkpSubmit');
+      dateEl.value = firstPickupDateWithSlots(DB.all('pickupRequests') || [], now);
+
+      function refreshSlots() {
+        const date = dateEl.value || todayStr;
+        const reqs = DB.all('pickupRequests') || [];
+        const avail = availablePickupSlots(date, reqs, new Date());
+        const all = generatePickupSlots();
+        if (avail.length) {
+          slotEl.innerHTML = all.map(function (sl) {
+            const ok = avail.some(a => a.value === sl.value);
+            return '<option value="' + sl.value + '"' + (ok ? '' : ' disabled') + '>' +
+              (ok ? '🟢 ' : '🔴 ') + sl.label + (ok ? '' : ' — booked / too soon') + '</option>';
+          }).join('');
+          slotEl.value = avail[0].value;
+        } else {
+          slotEl.innerHTML = '<option value="">No slots left — please choose another date</option>';
         }
+        helpEl.textContent = avail.length
+          ? avail.length + ' slot available • har slot par sirf 1 booking'
+          : 'Is date par koi slot nahi bacha. Aglay din try karein.';
+        submitEl.disabled = !avail.length;
+      }
+      dateEl.onchange = refreshSlots;
+      refreshSlots();
+
+      submitEl.onclick = async function () {
+        const name  = document.getElementById('pkpName').value.trim();
+        const phone = document.getElementById('pkpPhone').value.trim();
+        const addr  = document.getElementById('pkpAddr').value.trim();
+        if (!name || !phone || !addr) { showPortalToast('Please fill name, phone and address', 'error'); return; }
+        const date = dateEl.value;
+        const slot = slotEl.value;
+        if (!slot) { showPortalToast('⏰ Is date par koi slot available nahi. Doosri date chunein.', 'error'); return; }
+        if (!isPickupSlotAvailable(slot, date, DB.all('pickupRequests') || [], new Date())) {
+          showPortalToast('⏰ Ye slot ab booked hai ya ' + leadHours + ' ghante se kam waqt bacha hai. Doosra slot chunein.', 'error');
+          refreshSlots();
+          return;
+        }
+        submitEl.disabled = true;
+        submitEl.textContent = '⏳ Slot check ho raha hai...';
+        const req = {
+          customerName: name, customerPhone: phone, address: addr,
+          pickupDate: date, pickupSlot: slot,
+          notes: document.getElementById('pkpNotes').value.trim(),
+          status: 'pending', source: 'portal'
+        };
+        let result = null;
+        try { result = await pushPickupRequestToCloud(req); }
+        catch (e) { result = { ok:false, reason:'error' }; }
+        submitEl.disabled = false;
+        submitEl.innerHTML = '\u{1F69A} Submit Request';
+        if (!result || !result.ok) {
+          if (result && result.reason === 'slot_taken') {
+            /* Show the competing booking as taken immediately in this browser. */
+            DB.insert('pickupRequests', Object.assign({}, req, { id: 'taken-' + Date.now(), _localOnly: true }));
+            showPortalToast('⏰ Ye slot abhi kisi aur ne book kar liya. Doosra slot chunein.', 'error');
+            refreshSlots();
+          } else {
+            showPortalToast('❌ Request save nahi hui. Dobara try karein ya shop se rabta karein.', 'error');
+          }
+          return;
+        }
+        DB.insert('pickupRequests', req);
+        closeModal();
+        showPortalToast('\u2705 Pickup request submit ho gayi! ' + date + ' • ' + formatPickupSlot(slot), 'success');
       };
     }
 

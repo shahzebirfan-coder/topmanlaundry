@@ -674,6 +674,43 @@ function openPortalConfigDialog() {
       <div class="field"><label>Payment Instructions</label><textarea id="pcfgPI" rows="2" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;">${escapeHtml(s.paymentInstructions||'Please pay to the above account and upload screenshot below. We will verify within 30 minutes.')}</textarea></div>
     </div>
 
+    <div style="font-weight:700;margin:14px 0 8px;border-top:1px solid var(--border);padding-top:14px;">🕒 Pickup Time Slots (Customer Portal)</div>
+    <div class="form-row">
+      <div class="field"><label>Shop opens at (hour)</label>
+        <select id="pcfgSlotStart">${Array.from({length:15},(_,i)=>i+6).map(h=>`<option value="${h}" ${(+s.pickupStartHour||9)===h?'selected':''}>${h%12===0?12:h%12} ${h>=12?'PM':'AM'}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Shop closes at (hour)</label>
+        <select id="pcfgSlotEnd">${Array.from({length:11},(_,i)=>i+14).map(h=>`<option value="${h}" ${(+s.pickupEndHour||21)===h?'selected':''}>${h%12===0?12:h%12} ${h>=12?'PM':'AM'}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Slot length</label>
+        <select id="pcfgSlotMins">
+          <option value="30" ${(+s.pickupSlotMinutes||60)===30?'selected':''}>30 minutes</option>
+          <option value="60" ${(+s.pickupSlotMinutes||60)===60?'selected':''}>1 hour</option>
+          <option value="120" ${(+s.pickupSlotMinutes||60)===120?'selected':''}>2 hours</option>
+        </select>
+      </div>
+      <div class="field"><label>Minimum notice (hours before pickup)</label>
+        <input type="number" id="pcfgLeadHrs" min="0" max="24" value="${Math.round((Number.isFinite(+s.pickupLeadMinutes) ? +s.pickupLeadMinutes : 120)/60)}"/>
+        <small style="color:var(--text-soft);">Default 2 — abhi 10:30 ho toh pehla slot uske 2 ghante baad milega.</small>
+      </div>
+    </div>
+    <div style="background:#ecfdf5;border-left:4px solid #10b981;padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.5;">
+      🔒 Slots non-overlapping hain aur <b>har slot par sirf 1 customer</b> book ho sakta hai (cloud par atomic check). Booked / bahut jald wale slots portal par khud band ho jate hain.
+    </div>
+
+    <div style="font-weight:700;margin:14px 0 8px;border-top:1px solid var(--border);padding-top:14px;">📱 Customer Pickup Confirmation (WhatsApp)</div>
+    <div class="field">
+      <label>Message template — assign karte hi customer ko ye message jata hai</label>
+      <textarea id="pcfgCustTpl" rows="7" style="font-size:12px;line-height:1.5;">${escapeHtml(s.pickupCustomerWaTemplate || '')}</textarea>
+      <small style="color:var(--text-soft);line-height:1.6;display:block;margin-top:4px;">
+        Khali chhod dein = default message. Variables:
+        <code>{name}</code> <code>{captain}</code> <code>{captainPhone}</code> <code>{date}</code>
+        <code>{slot}</code> <code>{address}</code> <code>{shop}</code> <code>{shopPhone}</code> <code>{ref}</code>
+      </small>
+    </div>
+
     <div style="font-weight:700;margin:14px 0 8px;border-top:1px solid var(--border);padding-top:14px;">🎁 Referral Settings</div>
     <div class="form-row">
       <div class="field"><label>Referral Discount % (for both)</label><input type="number" id="pcfgRD" value="${s.referralDiscountPercent||10}" min="0" max="50"/></div>
@@ -730,7 +767,12 @@ function openPortalConfigDialog() {
       const patch = {
         shopHours: $('#pcfgHours', m).value.trim(),
         paymentInstructions: $('#pcfgPI', m).value.trim(),
-        referralDiscountPercent: Math.max(0, +$('#pcfgRD', m).value || 10)
+        referralDiscountPercent: Math.max(0, +$('#pcfgRD', m).value || 10),
+        pickupStartHour: +$('#pcfgSlotStart', m).value || 9,
+        pickupEndHour: +$('#pcfgSlotEnd', m).value || 21,
+        pickupSlotMinutes: +$('#pcfgSlotMins', m).value || 60,
+        pickupLeadMinutes: Math.max(0, (+$('#pcfgLeadHrs', m).value || 0) * 60),
+        pickupCustomerWaTemplate: $('#pcfgCustTpl', m).value.trim()
       };
       /* Locked fields are NEVER written from the dialog unless an IT admin
          explicitly unlocked them. Enforcement in DB still wins otherwise. */

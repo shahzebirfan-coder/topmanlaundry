@@ -284,6 +284,7 @@ function downloadInvoicePDF(orderId) {
       <table class="totals" style="margin-top:10px;">
         <tr><td>Subtotal:</td><td style="text-align:right;">${fmtMoney(o.subtotal)}</td></tr>
         ${o.discount ? `<tr><td>Discount:</td><td style="text-align:right;">- ${fmtMoney(o.discount)}</td></tr>` : ''}
+        ${(typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0))>0 ? `<tr><td>Pick Up &amp; Delivery Charges (after discount):</td><td style="text-align:right;">+ ${fmtMoney(typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0))}</td></tr>` : ''}
         <tr class="total-line"><td><b>TOTAL:</b></td><td style="text-align:right;"><b>${fmtMoney(o.total)}</b></td></tr>
         <tr><td>Paid:</td><td style="text-align:right;">${fmtMoney(o.paid)}</td></tr>
         ${o.due ? `<tr><td><b>Due:</b></td><td style="text-align:right;color:#a00;"><b>${fmtMoney(o.due)}</b></td></tr>` : ''}

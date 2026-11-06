@@ -25,6 +25,20 @@ function fmtMoney(n) {
   return `${sign}${s.currency} ${v.toLocaleString()}`;
 }
 
+/* ============================================================
+   PICK UP & DELIVERY CHARGES
+   These are ALWAYS added AFTER discount (and after tax). They are never
+   part of the subtotal, so no manual/loyalty/percent discount can eat
+   into them. Also reads the legacy `deliveryCharges` key.
+   ============================================================ */
+function pdChargesOf(o) {
+  if (!o || typeof o !== 'object') return 0;
+  const raw = (o.pickupDeliveryCharges != null) ? o.pickupDeliveryCharges
+            : (o.deliveryCharges != null ? o.deliveryCharges : 0);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 function fmtDate(iso) {
   if (!iso) return '-';
   const d = new Date(iso);
@@ -365,10 +379,28 @@ async function printElement(elementOrSelector, options) {
   const win = window.open('', '_blank', 'width=420,height=700');
   if (!win) { alert('Please allow popups for printing!'); return; }
 
+  /* Page geometry. `@page { size: 80mm auto }` is INVALID CSS (a length
+     cannot be mixed with `auto`), which made Chrome ignore it and fall back
+     to Letter — one more reason the exported PDF looked wrong. */
+  const isLaser   = !isThermal;
+  const pageSize  = isThermal ? `${paper}mm 297mm` : 'A4';
+  const pageMarg  = isLaser ? 10 : marginMm;
+  const bodyWidth = isThermal ? (paper === '58' ? '58mm' : '80mm') : '';
+
   const printDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>${options.title || 'Print'}</title>
 <style>
 ${styleText}
+/* === CRITICAL: neutralise the host app's in-place print rule ===
+   style.css contains '@media print { body * { visibility: hidden; } }'
+   with an exception for #printArea. This standalone window has NO
+   #printArea, so that rule hides EVERY slip and Chrome's "Save as PDF"
+   produces a blank page. Here we print ONLY the slip, so make it all
+   visible again. Must come AFTER the inlined stylesheets to win. */
+@media print {
+  html, body, body * { visibility: visible !important; }
+  .no-print, .modal-backdrop, .modal-footer, .modal-x { display: none !important; }
+}
 /* === Print overrides — MAX VISIBILITY === */
 * { box-sizing: border-box; }
 html, body {
@@ -426,8 +458,8 @@ table { width: 100%; border-collapse: collapse; }
 .print-slip:last-child { page-break-after: auto; break-after: auto; }
 .print-page-break { page-break-after: always; break-after: page; height: 0; }
 @media print {
-  @page { size: ${paper}mm auto; margin: ${marginMm}mm; }
-  html, body { width: ${paper === '58' ? '58mm' : '80mm'} !important; }
+  @page { size: ${pageSize}; margin: ${pageMarg}mm; }
+  ${bodyWidth ? `html, body { width: ${bodyWidth} !important; }` : ''}
   body { padding: 0 !important; background: #fff !important; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   .invoice-page { padding: 0 !important; }
@@ -438,29 +470,43 @@ table { width: 100%; border-collapse: collapse; }
 }
 </style>
 </head><body>
+<button class="no-print" type="button" onclick="window.close()" style="position:fixed;right:10px;top:10px;z-index:9999;padding:6px 12px;border:1px solid #bbb;border-radius:8px;background:#fff;color:#333;font:12px Arial;cursor:pointer;">✕ Close window</button>
+<div class="no-print" id="printDoneNote" style="display:none;position:fixed;left:10px;top:10px;z-index:9999;padding:6px 10px;border-radius:8px;background:#e8f6ee;color:#12653f;font:11px Arial;">✅ Print / Save as PDF ho gaya — ab ye tab band kar sakte hain.</div>
 ${html}
 <script>
-  // Wait for all images to load before printing
-  function doPrint() {
-    setTimeout(function() {
-      window.print();
-      setTimeout(function() { window.close(); }, 1000);
-    }, 200);
+  /* NEVER force-close the print window on a short timer: Chrome's
+     "Save as PDF" dialog stays open longer than 1s and closing the tab
+     blanked the PDF. Use a manual Close button + a long safety net. */
+  var closed = false;
+  function closeSafely() {
+    if (closed) return; closed = true;
+    try { window.close(); } catch (e) {}
   }
-  window.onload = function() {
+  /* Some Chrome builds fire afterprint as soon as the preview opens,
+     so we NEVER use it to close the tab. Just show a hint instead. */
+  window.addEventListener('afterprint', function () {
+    var n = document.getElementById('printDoneNote');
+    if (n) n.style.display = 'block';
+  });
+  setTimeout(closeSafely, 600000);   // 10 min safety net only
+
+  function doPrint() {
+    if (window.__printed) return; window.__printed = true;
+    setTimeout(function () { window.print(); }, 250);
+  }
+  window.onload = function () {
     const imgs = document.querySelectorAll('img');
     if (imgs.length === 0) { doPrint(); return; }
     let loaded = 0;
-    const checkAll = function() {
+    const checkAll = function () {
       loaded++;
       if (loaded >= imgs.length) doPrint();
     };
-    imgs.forEach(function(img) {
+    imgs.forEach(function (img) {
       if (img.complete && img.naturalHeight !== 0) checkAll();
       else { img.onload = checkAll; img.onerror = checkAll; }
     });
-    // Fallback timeout
-    setTimeout(doPrint, 3000);
+    setTimeout(doPrint, 3000);       // fallback if an image hangs
   };
 </` + `script>
 </body></html>`;

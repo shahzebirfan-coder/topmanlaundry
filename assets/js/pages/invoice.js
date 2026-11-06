@@ -180,6 +180,8 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
   const logoBlock = showLogo ? buildInvoiceLogo(s, width, fontSize) : '';
 
   const totalDisc = (o.discount || ((o.manualDiscount||0) + (o.loyaltyDiscount||0)));
+  const pd = (typeof pdChargesOf === 'function') ? pdChargesOf(o) : (Number(o.pickupDeliveryCharges)||0);
+  const showNetTotal = (totalDisc > 0 || pd > 0 || (o.tax > 0));
   const discountLines = showDiscount ? `
     ${o.manualDiscount>0 ? `<tr><td style="padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">🎉 Discount${o.discountType==='percent'?` (${o.discountValue}%)`:''}:</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">- ${fmtMoney(o.manualDiscount)}</td></tr>` : ''}
     ${o.loyaltyDiscount>0 ? `<tr><td style="padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">⭐ Loyalty (${o.loyaltyPercent||''}%):</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">- ${fmtMoney(o.loyaltyDiscount)}</td></tr>` : ''}
@@ -238,10 +240,11 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
         <tr style="border-top:2px solid #000;"><td style="padding:8px 0;font-weight:bold;">Gross Total</td><td style="text-align:right;padding:8px 0;font-weight:bold;font-size:${fontSize+4}px;">${fmtMoney(o.subtotal)}</td></tr>
         ${discountLines}
         ${o.tax>0?`<tr><td style="padding:6px 0;">Tax</td><td style="text-align:right;padding:6px 0;">${fmtMoney(o.tax)}</td></tr>`:''}
-        ${totalDisc>0?`<tr style="border-top:1px dashed #000;"><td style="padding:8px 0;font-weight:900;font-size:${fontSize+4}px;">NET TOTAL</td><td style="text-align:right;padding:8px 0;font-weight:900;font-size:${fontSize+6}px;">${fmtMoney(o.total)}</td></tr>`:''}
+        ${pd>0?`<tr style="border-top:1px dashed #000;"><td style="padding:6px 0;font-weight:900;">Pick Up &amp; Delivery Charges<br><span style="font-size:${fontSize-1}px;font-weight:normal;">(added after discount)</span></td><td style="text-align:right;padding:6px 0;font-weight:900;">+ ${fmtMoney(pd)}</td></tr>`:''}
+        ${showNetTotal?`<tr style="border-top:1px dashed #000;"><td style="padding:8px 0;font-weight:900;font-size:${fontSize+4}px;">NET TOTAL</td><td style="text-align:right;padding:8px 0;font-weight:900;font-size:${fontSize+6}px;">${fmtMoney(o.total)}</td></tr>`:''}
         <tr><td style="padding:6px 0;">Paid</td><td style="text-align:right;padding:6px 0;">${fmtMoney(o.paid)}</td></tr>
         ${o.due>0?`<tr><td style="padding:8px 0;font-size:${fontSize+4}px;font-weight:900;"><b style="color:#000;">Payment Due</b></td><td style="text-align:right;padding:8px 0;font-size:${fontSize+4}px;"><b style="color:#000;font-weight:900;">${fmtMoney(o.due)}</b></td></tr>`:''}
-        ${o.due==0 && totalDisc==0?`<tr><td style="padding:8px 0;font-size:${fontSize+4}px;font-weight:900;"><b style="color:#000;">Payment</b></td><td style="text-align:right;padding:8px 0;font-size:${fontSize+4}px;"><b style="color:#000;font-weight:900;">${fmtMoney(o.total)}</b></td></tr>`:''}
+        ${o.due==0 && !showNetTotal?`<tr><td style="padding:8px 0;font-size:${fontSize+4}px;font-weight:900;"><b style="color:#000;">Payment</b></td><td style="text-align:right;padding:8px 0;font-size:${fontSize+4}px;"><b style="color:#000;font-weight:900;">${fmtMoney(o.total)}</b></td></tr>`:''}
       </table>
 
       ${showNotes && o.notes?`<div style="font-size:${fontSize}px;font-weight:bold;margin-top:16px;padding:8px;border:2px dashed #000;">📝 ${escapeHtml(o.notes)}</div>`:''}
@@ -311,8 +314,9 @@ function buildOfficeSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
         <div style="border-top:2px solid #000; margin-top:8px; padding-top:8px;">
           <table style="font-size:${fontSize+3}px;width:100%;border-collapse:collapse;line-height:1.5;">
             <tr><td style="padding:4px 0;">Gross</td><td style="text-align:right;padding:4px 0;font-weight:bold;">${fmtMoney(o.subtotal)}</td></tr>
-            ${(o.discount||((o.manualDiscount||0)+(o.loyaltyDiscount||0)))>0 ? `<tr><td style="padding:4px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">Discount</td><td style="text-align:right;padding:4px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">-${fmtMoney(o.discount||((o.manualDiscount||0)+(o.loyaltyDiscount||0)))}</td></tr>
-            <tr><td style="padding:4px 0;font-weight:900;">Net Total</td><td style="text-align:right;padding:4px 0;font-weight:900;">${fmtMoney(o.total)}</td></tr>` : `<tr><td style="padding:4px 0;">Total</td><td style="text-align:right;padding:4px 0;font-weight:bold;">${fmtMoney(o.total)}</td></tr>`}
+            ${(o.discount||((o.manualDiscount||0)+(o.loyaltyDiscount||0)))>0 ? `<tr><td style="padding:4px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">Discount</td><td style="text-align:right;padding:4px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">-${fmtMoney(o.discount||((o.manualDiscount||0)+(o.loyaltyDiscount||0)))}</td></tr>`:''}
+            ${(typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0))>0 ? `<tr><td style="padding:4px 0;font-weight:900;">Pick Up &amp; Delivery (after disc.)</td><td style="text-align:right;padding:4px 0;font-weight:900;">+ ${fmtMoney(typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0))}</td></tr>`:''}
+            ${((o.discount||((o.manualDiscount||0)+(o.loyaltyDiscount||0)))>0 || (typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0))>0) ? `<tr><td style="padding:4px 0;font-weight:900;">Net Total</td><td style="text-align:right;padding:4px 0;font-weight:900;">${fmtMoney(o.total)}</td></tr>` : `<tr><td style="padding:4px 0;">Total</td><td style="text-align:right;padding:4px 0;font-weight:bold;">${fmtMoney(o.total)}</td></tr>`}
             <tr><td style="padding:4px 0;">Paid</td><td style="text-align:right;padding:4px 0;font-weight:bold;">${fmtMoney(o.paid)}</td></tr>
             ${o.due>0?`<tr><td style="padding:4px 0;color:#000;font-weight:900;">Due</td><td style="text-align:right;padding:4px 0;color:#000;font-weight:900;">${fmtMoney(o.due)}</td></tr>`:''}
           </table>
@@ -358,6 +362,7 @@ Delivery: {delivery} ({type})
     '{items}':    itemsText,
     '{subtotal}': fmtMoney(o.subtotal),
     '{discount}': fmtMoney(o.discount || 0),
+    '{charges}':  fmtMoney(typeof pdChargesOf === 'function' ? pdChargesOf(o) : (Number(o.pickupDeliveryCharges)||0)),
     '{total}':    fmtMoney(o.total),
     '{paid}':     fmtMoney(o.paid),
     '{due}':      fmtMoney(o.due),
@@ -539,7 +544,7 @@ function openInvoiceCustomizer(reopenOrderId) {
       <div class="field">
         <label>📱 WhatsApp Message Template</label>
         <textarea id="cfWaTpl" rows="8" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:12px;">${escapeHtml(s.whatsappTemplate||'')}</textarea>
-        <small style="color:var(--text-soft);">Variables: {name} {shop} {invoice} {pcs} {items} {subtotal} {discount} {total} {paid} {due} {delivery} {type} {phone} {address} {footer}</small>
+        <small style="color:var(--text-soft);">Variables: {name} {shop} {invoice} {pcs} {items} {subtotal} {discount} {charges} {total} {paid} {due} {delivery} {type} {phone} {address} {footer}</small>
       </div>
     </div>
 

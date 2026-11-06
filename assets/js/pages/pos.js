@@ -4,6 +4,7 @@ let posState = {
   customerId: 'cu1',
   discountType: 'fixed',   // 'fixed' or 'percent'
   discountValue: 0,
+  pickupDeliveryCharges: 0, // cashier-entered, added AFTER discount
   activeCategory: 'all',
   search: ''
 };
@@ -44,7 +45,7 @@ function renderPOS() {
   renderCart();
 
   $('#posSearch').oninput = (e) => { posState.search = e.target.value; renderPosGrid(); };
-  $('#clearCart').onclick = () => { posState.cart = []; posState.discountValue = 0; renderCart(); };
+  $('#clearCart').onclick = () => { posState.cart = []; posState.discountValue = 0; posState.pickupDeliveryCharges = 0; renderCart(); };
   $('#chooseCustBtn').onclick = openCustomerPicker;
 
   // Mobile: tap cart header to collapse/expand
@@ -157,9 +158,16 @@ function calcCartTotals() {
   const totalDiscount = manualDiscount + loyaltyDiscount;
   const taxable = Math.max(0, subtotal - totalDiscount);
   const tax = Math.round(taxable * taxPercent / 100);
-  const total = taxable + tax;
 
-  return { subtotal, manualDiscount, loyaltyDiscount, loyaltyPercent, totalDiscount, tax, taxPercent, total };
+  /* Pick Up & Delivery Charges are deliberately OUTSIDE the subtotal:
+     discount and tax are computed on items only, then charges are added
+     at the very end. A percent discount can never reduce these charges. */
+  const pickupDeliveryCharges = Math.max(0, Number(posState.pickupDeliveryCharges) || 0);
+  const totalBeforeCharges = taxable + tax;
+  const total = totalBeforeCharges + pickupDeliveryCharges;
+
+  return { subtotal, manualDiscount, loyaltyDiscount, loyaltyPercent, totalDiscount,
+           tax, taxPercent, pickupDeliveryCharges, totalBeforeCharges, total };
 }
 
 function renderCart() {
@@ -269,11 +277,47 @@ function renderCart() {
 
     ${tot.loyaltyDiscount>0?`<div class="row" style="color:var(--success);"><span>⭐ Loyalty (${tot.loyaltyPercent}%)</span><span>− ${fmtMoney(tot.loyaltyDiscount)}</span></div>`:''}
     ${tot.taxPercent>0?`<div class="row"><span>Tax (${tot.taxPercent}%)</span><span>${fmtMoney(tot.tax)}</span></div>`:''}
-    <div class="row total"><span>Total</span><span class="v">${fmtMoney(tot.total)}</span></div>
+
+    <div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:8px;margin:6px 0;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;flex:1;line-height:1.35;">🚚 <b>Pick Up &amp; Delivery Charges</b><br>
+          <small style="color:var(--text-soft);">Open field — cashier enters amount. Added AFTER discount.</small></span>
+        <input type="number" id="pdChargesInput" value="${tot.pickupDeliveryCharges}" min="0" step="any" placeholder="0"
+          style="width:90px;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-weight:700;"/>
+      </div>
+    </div>
+    <div class="row" id="pdSummaryRow" style="display:${tot.pickupDeliveryCharges>0?'flex':'none'};">
+      <span>🚚 Pick Up &amp; Delivery Charges <small style="color:var(--text-soft);">(after discount)</small></span>
+      <span id="pdSummaryVal">+ ${fmtMoney(tot.pickupDeliveryCharges)}</span>
+    </div>
+
+    <div class="row total"><span>Total</span><span class="v" id="cartTotalVal">${fmtMoney(tot.total)}</span></div>
     <button class="btn btn-primary btn-block btn-lg" id="checkoutBtn" style="margin-top:10px;">${t('pos.bookOrderArrow')}</button>
   `;
   $$('input[name="discType"]').forEach(r => r.onchange = e => { posState.discountType = e.target.value; renderCart(); });
   $('#discValueInput').oninput = e => { posState.discountValue = Math.max(0, parseFloat(e.target.value)||0); renderCart(); };
+
+  /* Live update WITHOUT re-rendering the cart (keeps focus in the input). */
+  const refreshPdTotals = () => {
+    const t2 = calcCartTotals();
+    const row = $('#pdSummaryRow');
+    if (row) row.style.display = t2.pickupDeliveryCharges > 0 ? 'flex' : 'none';
+    const pv = $('#pdSummaryVal'); if (pv) pv.textContent = '+ ' + fmtMoney(t2.pickupDeliveryCharges);
+    const tv = $('#cartTotalVal'); if (tv) tv.textContent = fmtMoney(t2.total);
+  };
+  const pdInp = $('#pdChargesInput');
+  if (pdInp) {
+    pdInp.onfocus = () => pdInp.select();
+    pdInp.oninput = e => {
+      posState.pickupDeliveryCharges = Math.max(0, parseFloat(e.target.value) || 0);
+      refreshPdTotals();
+    };
+    pdInp.onblur = e => {
+      posState.pickupDeliveryCharges = Math.max(0, parseFloat(e.target.value) || 0);
+      e.target.value = posState.pickupDeliveryCharges;
+      refreshPdTotals();
+    };
+  }
   $('#checkoutBtn').onclick = openBookingForm;
 }
 
@@ -398,6 +442,18 @@ function openBookingForm() {
       </div>
     </div>
 
+    <!-- Pick Up & Delivery Charges: OPEN field, cashier enters the amount -->
+    <div class="form-row cols-1" style="margin-bottom:8px;">
+      <div class="field">
+        <label>🚚 Pick Up &amp; Delivery Charges <span style="font-weight:normal;color:var(--text-soft);">(optional — cashier enters amount)</span></label>
+        <input type="number" id="bPdCharges" value="${tot.pickupDeliveryCharges}" min="0" step="any" placeholder="0"
+          style="font-weight:700;" />
+        <div style="font-size:11px;color:var(--text-soft);margin-top:5px;line-height:1.4;">
+          ℹ️ Yeh charges <b>discount ke baad</b> add honge — in par koi manual / loyalty / % discount nahi lagega.
+        </div>
+      </div>
+    </div>
+
     <!-- Packaging style -->
     <div class="form-row cols-1" style="margin-bottom:8px;">
       <div class="field">
@@ -438,7 +494,11 @@ function openBookingForm() {
       ${tot.manualDiscount>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--danger);"><span>Manual Discount</span><span>− ${fmtMoney(tot.manualDiscount)}</span></div>`:''}
       ${tot.loyaltyDiscount>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--success);"><span>⭐ Loyalty Discount</span><span>− ${fmtMoney(tot.loyaltyDiscount)}</span></div>`:''}
       ${tot.tax>0?`<div style="display:flex;justify-content:space-between;font-size:13px;"><span>Tax</span><span>${fmtMoney(tot.tax)}</span></div>`:''}
-      <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;color:var(--primary);margin-top:6px;border-top:1px dashed rgba(0,0,0,.1);padding-top:6px;"><span>TOTAL</span><span>${fmtMoney(tot.total)}</span></div>
+      <div id="bPdLine" style="display:${tot.pickupDeliveryCharges>0?'flex':'none'};justify-content:space-between;font-size:13px;font-weight:700;">
+        <span>🚚 Pick Up &amp; Delivery Charges <small style="font-weight:normal;color:var(--text-soft);">(after discount)</small></span>
+        <span id="bPdVal">+ ${fmtMoney(tot.pickupDeliveryCharges)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;color:var(--primary);margin-top:6px;border-top:1px dashed rgba(0,0,0,.1);padding-top:6px;"><span>TOTAL</span><span id="bTotalVal">${fmtMoney(tot.total)}</span></div>
     </div>
 
     <div class="modal-footer">
@@ -581,6 +641,21 @@ function openBookingForm() {
       $('#bLoyaltyActive', m).checked = true;
       toast('Loyalty number generated','success');
     };
+    /* Charges are live: discount stays untouched, only the final total moves. */
+    const refreshBookingPd = () => {
+      const t2 = calcCartTotals();
+      const line = $('#bPdLine', m);
+      if (line) line.style.display = t2.pickupDeliveryCharges > 0 ? 'flex' : 'none';
+      const pv = $('#bPdVal', m); if (pv) pv.textContent = '+ ' + fmtMoney(t2.pickupDeliveryCharges);
+      const tv = $('#bTotalVal', m); if (tv) tv.textContent = fmtMoney(t2.total);
+    };
+    const bPd = $('#bPdCharges', m);
+    if (bPd) {
+      bPd.onfocus = () => bPd.select();
+      bPd.oninput = e => { posState.pickupDeliveryCharges = Math.max(0, parseFloat(e.target.value)||0); refreshBookingPd(); };
+      bPd.onblur  = () => { bPd.value = posState.pickupDeliveryCharges; refreshBookingPd(); };
+    }
+
     $('#cancelBtn', m).onclick = closeModal;
     $('#nextBtn', m).onclick = () => {
       const name = $('#bCustName', m).value.trim();
@@ -601,8 +676,13 @@ function openBookingForm() {
       else customer = DB.insert('customers', custData);
       posState.customerId = customer.id;
 
+      /* Final read so autofill / paste without an input event is not missed. */
+      const bPdFinal = $('#bPdCharges', m);
+      if (bPdFinal) posState.pickupDeliveryCharges = Math.max(0, parseFloat(bPdFinal.value) || 0);
+
       const deliveryTypeEl = m.querySelector('input[name="bDelType"]:checked');
       const orderMeta = {
+        pickupDeliveryCharges: posState.pickupDeliveryCharges,
         deliveryDate: $('#bDeliveryDate', m).value,
         deliveryType: deliveryTypeEl ? deliveryTypeEl.value : 'hanger',
         notes: $('#bNotes', m).value.trim(),
@@ -674,6 +754,15 @@ function openPaymentDialog(orderMeta) {
         <input type="number" id="paidInput" value="${tot.total}" min="0"/>
       </div>
     </div>
+    <div id="payBreakdown" style="background:var(--surface-alt);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.6;">
+      <b>🧾 Bill breakdown</b><br>
+      Subtotal ${fmtMoney(tot.subtotal)}
+      ${tot.totalDiscount>0?` • Discount − ${fmtMoney(tot.totalDiscount)}`:''}
+      ${tot.tax>0?` • Tax + ${fmtMoney(tot.tax)}`:''}
+      ${tot.pickupDeliveryCharges>0?`<br><span style="color:var(--primary);font-weight:800;">🚚 Pick Up &amp; Delivery Charges (AFTER discount): + ${fmtMoney(tot.pickupDeliveryCharges)}</span>`:'<br><span style="color:var(--text-soft);">🚚 Pick Up &amp; Delivery Charges: ${fmtMoney(0)} (after discount)</span>'}
+      <br><b>Total: ${fmtMoney(tot.total)}</b>
+    </div>
+
     <div class="form-row cols-1" style="${DB.currentUser().role === 'admin' ? '' : 'display:none;'}">
       <div class="field">
         <label>🔙 Backdate Order <span style="font-weight:normal;color:#64748b;">(Optional - Leaves current date/time if empty)</span></label>
@@ -748,6 +837,8 @@ function openPaymentDialog(orderMeta) {
         discountType: posState.discountType,
         discountValue: posState.discountValue,
         tax: tot.tax,
+        pickupDeliveryCharges: tot.pickupDeliveryCharges,
+        totalBeforeCharges: tot.totalBeforeCharges,
         total: tot.total,
         paid: actualPaid,
         createdAt: $('#backdateInput', m).value ? new Date($('#backdateInput', m).value).toISOString() : new Date().toISOString(),
@@ -774,7 +865,7 @@ function openPaymentDialog(orderMeta) {
           if (typeof showLowStockAlert === 'function' && alerts.length) showLowStockAlert(alerts);
         } catch(e) { console.warn('Inventory auto-deduct failed:', e); }
       }
-      posState.cart = []; posState.discountValue = 0; posState.customerId = 'cu1';
+      posState.cart = []; posState.discountValue = 0; posState.pickupDeliveryCharges = 0; posState.customerId = 'cu1';
       closeModal();
       toast('Order booked successfully!', 'success');
       openInvoice(saved.id);

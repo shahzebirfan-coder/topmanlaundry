@@ -833,9 +833,9 @@
   <script src="assets/js/portal-payments.js?v=20261104.6"></script>
   <script src="assets/js/it-owner.js?v=20261104.5"></script>
   <script src="assets/js/db.js?v=20261104.6"></script>
-  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/utils.js?v=20261104.17"></script>
   <script src="assets/js/holiday-themes.js?v=20261104.15"></script>
-  <script src="assets/js/portal-helpers.js?v=20261104.12"></script>
+  <script src="assets/js/portal-helpers.js?v=20261104.17"></script>
   <script src="assets/js/pickup-slots.js?v=20261104.11"></script>
   <!-- Built-in Firebase config + Shop ID (shared by every page) -->
   <script src="assets/js/cloud-autoconfig.js?v=20261104.1"></script>
@@ -1229,6 +1229,7 @@
             <div style="text-align:right;">
               <div style="font-size:11px;color:#666;">${pt("ord_total")||"Total"}</div>
               <div style="font-weight:800;font-size:18px;color:#4f7cff;">${fmtMoney(o.total)}</div>
+              ${(typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0))>0 ? `<div style="font-size:10px;color:#666;">incl. Pick Up &amp; Delivery ${fmtMoney(typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0))}<br>(added after discount)</div>` : ''}
             </div>
           </div>
 

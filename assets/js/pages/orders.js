@@ -279,6 +279,16 @@ function openEditInvoice(orderId) {
     </div>
     <div class="form-row">
       <div class="field">
+        <label>🚚 Pick Up &amp; Delivery Charges <span style="font-weight:normal;color:var(--text-soft);">(after discount)</span></label>
+        <input type="number" id="ePdCharges" value="${(typeof pdChargesOf==='function')?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0)}" min="0" step="any"/>
+      </div>
+      <div class="field">
+        <label>Tax</label>
+        <input type="number" id="eTax" value="${o.tax||0}" min="0" step="any"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
         <label>Paid Amount</label>
         <input type="number" id="ePaid" value="${o.paid}" min="0"/>
       </div>
@@ -323,12 +333,17 @@ function openEditInvoice(orderId) {
       const discType = $('#eDiscType', m).value;
       const discVal = +$('#eDiscVal', m).value || 0;
       const disc = discType === 'percent' ? Math.round(subtotal * discVal / 100) : discVal;
-      const total = Math.max(0, subtotal - disc);
+      const tax = Math.max(0, +$('#eTax', m).value || 0);
+      const charges = Math.max(0, +$('#ePdCharges', m).value || 0);
+      /* Charges are applied AFTER discount — never part of the discount base. */
+      const total = Math.max(0, subtotal - disc) + tax + charges;
       const paid = Math.min(total, +$('#ePaid', m).value || 0);
       const due = total - paid;
       $('#eTotals', m).innerHTML = `
         Subtotal: ${fmtMoney(subtotal)} •
         Discount: − ${fmtMoney(disc)} •
+        Tax: + ${fmtMoney(tax)} •
+        🚚 Pick Up &amp; Delivery (after discount): + ${fmtMoney(charges)} •
         <b>Total: ${fmtMoney(total)}</b> •
         Paid: ${fmtMoney(paid)} •
         ${due>0?`<span style="color:var(--danger);">Due: ${fmtMoney(due)}</span>`:'<span style="color:var(--success);">Paid in Full ✅</span>'}
@@ -357,7 +372,7 @@ function openEditInvoice(orderId) {
       calcAndShow();
     };
 
-    [$('#eDiscType', m), $('#eDiscVal', m), $('#ePaid', m)].forEach(el => el.oninput = calcAndShow);
+    [$('#eDiscType', m), $('#eDiscVal', m), $('#ePaid', m), $('#ePdCharges', m), $('#eTax', m)].forEach(el => { if (el) el.oninput = calcAndShow; });
     $('#eDiscType', m).onchange = calcAndShow;
     calcAndShow();
 
@@ -376,7 +391,9 @@ function openEditInvoice(orderId) {
       const discType = $('#eDiscType', m).value;
       const discVal = +$('#eDiscVal', m).value || 0;
       const disc = discType === 'percent' ? Math.round(subtotal * discVal / 100) : Math.min(subtotal, discVal);
-      const total = Math.max(0, subtotal - disc);
+      const tax = Math.max(0, +$('#eTax', m).value || 0);
+      const charges = Math.max(0, +$('#ePdCharges', m).value || 0);
+      const total = Math.max(0, subtotal - disc) + tax + charges;
       const paid = Math.min(total, +$('#ePaid', m).value || 0);
       const due = total - paid;
 
@@ -388,7 +405,7 @@ function openEditInvoice(orderId) {
       DB.update('orders', orderId, {
         items, subtotal, discountType: discType, discountValue: discVal,
         discount: disc, manualDiscount: disc, loyaltyDiscount: 0, loyaltyPercent: 0,
-        tax: 0, total, paid, due, isCredit: due > 0,
+        tax, pickupDeliveryCharges: charges, total, paid, due, isCredit: due > 0,
         status: $('#eStatus', m).value,
         deliveryDate: $('#eDelivery', m).value,
         paymentMethod: $('#ePayMethod', m).value,

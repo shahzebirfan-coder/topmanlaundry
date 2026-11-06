@@ -187,14 +187,16 @@ function renderReportBody() {
 /* ===================== EXPORTS ===================== */
 function exportReportCSV() {
   const orders = rangeOrders();
-  const rows = [['OrderID','Date','Customer','Items','Subtotal','Discount','Tax','Total','Paid','Due','Status','PaymentMethod']];
+  const rows = [['OrderID','Date','Customer','Items','Subtotal','Discount','Tax','PickUpDeliveryCharges','Total','Paid','Due','Status','PaymentMethod']];
   orders.forEach(o => {
     const c = DB.get('customers', o.customerId) || { name:'' };
     rows.push([
       o.invoiceNo ? 'INV-'+o.invoiceNo : o.id,
       o.createdAt, c.name,
       (o.items||[]).map(i => `${i.qty}x ${i.name}`).join(' | '),
-      o.subtotal, o.discount, o.tax, o.total, o.paid, o.due, o.status, o.paymentMethod||''
+      o.subtotal, o.discount, o.tax,
+      (typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0)),
+      o.total, o.paid, o.due, o.status, o.paymentMethod||''
     ]);
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');

@@ -325,6 +325,7 @@ table.tbl { width:100%; border-collapse: collapse; }
 }
 .badge.pending  { background:#fef3c7; color:#92400e; }
 .badge.washing  { background:#dbeafe; color:#1e40af; }
+.badge.press    { background:#f3e8ff; color:#6b21a8; }
 .badge.ready    { background:#d1fae5; color:#065f46; }
 .badge.delivered{ background:#e0e7ff; color:#3730a3; }
 .badge.cancelled{ background:#fee2e2; color:#991b1b; }

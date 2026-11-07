@@ -25,12 +25,14 @@ const PORTAL_T = {
   // Timeline
   'booked':             { en: 'Booked',                                    ur: 'بک ہوا',                                rmn: 'Book Hua' },
   'washing':            { en: 'Washing',                                   ur: 'دھل رہا',                              rmn: 'Dhul Raha' },
+  'press':              { en: 'Press',                                     ur: 'پریس / استری',                        rmn: 'Press / Ironing' },
   'ready':              { en: 'Ready',                                     ur: 'تیار',                                  rmn: 'Tayar' },
   'delivered':          { en: 'Delivered',                                 ur: 'مل گیا',                                rmn: 'Mil Gaya' },
 
   // Status messages
   'msg_pending':        { en: 'Your order has been received and will be processed shortly.', ur: 'آپ کا آرڈر موصول ہو گیا، جلد پروسس ہوگا۔',   rmn: 'Aapka order mil gaya hai, jaldi process hoga.' },
   'msg_washing':        { en: 'Your clothes are being washed with care.',                    ur: 'آپ کے کپڑے دھلائی میں ہیں۔',                rmn: 'Aapke kapre dhoye ja rahe hain.' },
+  'msg_press':          { en: 'Your clothes have been PRESSED and ironed 👔 — final check is next!', ur: 'آپ کے کپڑے پریس / استری ہو گئے ہیں 👔', rmn: 'Aapke kapre PRESS ho gaye hain 👔 — ab final check baaqi hai.' },
   'msg_ready':          { en: 'Your order is READY for pickup!',                              ur: 'آپ کا آرڈر تیار ہے!',                       rmn: 'Aapka order TAYAR hai!' },
   'msg_delivered':      { en: 'This order has been delivered. Thank you!',                    ur: 'آرڈر ڈیلیور ہو گیا۔ شکریہ!',                rmn: 'Order deliver ho gaya. Shukriya!' },
   'msg_cancelled':      { en: 'This order was cancelled.',                                    ur: 'یہ آرڈر منسوخ ہو گیا۔',                     rmn: 'Yeh order cancel ho gaya.' },

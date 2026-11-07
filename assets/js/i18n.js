@@ -99,6 +99,7 @@ const TRANSLATIONS = {
   // Order statuses
   'status.pending':      { en: 'Pending',     ur: 'زیرِ التواء',  rmn: 'Pending' },
   'status.washing':      { en: 'Washing',     ur: 'دھلائی میں',  rmn: 'Dho Rahe Hain' },
+  'status.press':        { en: 'Press',       ur: 'پریس / استری', rmn: 'Press / Ironing' },
   'status.ready':        { en: 'Ready',       ur: 'تیار',         rmn: 'Tayyar' },
   'status.delivered':    { en: 'Delivered',   ur: 'ڈیلیور ہو گیا', rmn: 'Deliver Ho Gaya' },
   'status.cancelled':    { en: 'Cancelled',   ur: 'منسوخ',        rmn: 'Cancel' },

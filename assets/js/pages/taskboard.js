@@ -46,7 +46,7 @@ function renderTaskBoardData() {
   const todayStr = isoDay();
 
   // 1. Washing List: orders where status === 'washing' or 'pending'
-  const toWashOrders = orders.filter(o => ['washing', 'pending'].includes(o.status));
+  const toWashOrders = orders.filter(o => ['washing', 'pending', 'press'].includes(o.status));
   toWashOrders.sort((a,b) => (a.deliveryDate || '9999').localeCompare(b.deliveryDate || '9999'));
 
   // 2. Deadlines Today: orders where deliveryDate === today
@@ -77,7 +77,7 @@ function renderTaskBoardData() {
           <div style="font-size:12px;color:${delColor};font-weight:bold;margin-top:4px;">Delivery: ${o.deliveryDate ? escapeHtml(o.deliveryDate) : 'Not Set'}</div>
         </div>
         <div>
-          ${['pending','washing'].includes(o.status) 
+          ${['pending','washing','press'].includes(o.status) 
             ? `<button class="btn btn-success btn-sm" onclick="app.go('orders'); setTimeout(()=>openStatusChange('${o.id}'),200);" style="padding:8px 12px;font-weight:bold;">✅ Ready</button>`
             : `<span style="background:#dcfce7;color:#15803d;padding:4px 8px;border-radius:4px;font-weight:bold;font-size:12px;">✅ Ready</span>`
           }
@@ -95,7 +95,7 @@ function printTaskBoard() {
   const s = DB.settings();
   const orders = DB.all('orders');
   const todayStr = isoDay();
-  const toWashOrders = orders.filter(o => ['washing', 'pending'].includes(o.status));
+  const toWashOrders = orders.filter(o => ['washing', 'pending', 'press'].includes(o.status));
   toWashOrders.sort((a,b) => (a.deliveryDate || '9999').localeCompare(b.deliveryDate || '9999'));
 
   if (!toWashOrders.length) { toast('Nothing to print!','warning'); return; }

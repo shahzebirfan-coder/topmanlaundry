@@ -53,7 +53,7 @@ function renderDashboard() {
   const monthProfit  = monthReceived - monthExp;
 
   // === PIPELINE ===
-    const pending = orders.filter(o => ['pending','washing'].includes(o.status)).length;
+    const pending = orders.filter(o => ['pending','washing','press'].includes(o.status)).length;
   const ready = orders.filter(o => o.status === 'ready').length;
   
   const cutoff = new Date();

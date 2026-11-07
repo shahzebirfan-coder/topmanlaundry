@@ -6,7 +6,7 @@
   <title>Laundry POS — Order Tracker</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/style.css?v=20261104.18" />
   <link rel="stylesheet" href="assets/css/responsive.css" />
   <link rel="stylesheet" href="assets/css/holiday-themes.css?v=20261104.15" />
   <link rel="icon" href="assets/img/logo.jpeg" />
@@ -625,11 +625,11 @@
     /* ============== RESPONSIVE ============== */
     @media (max-width: 600px) {
       .portal-wrap { padding: 12px 8px 30px; }
-      .timeline { gap: 2px; }
-      .step { min-width: 64px; }
-      .step .dot { width: 42px; height: 42px; font-size: 18px; }
-      .step .label { font-size: 9px; }
-      .connector { min-width: 8px; margin-top: -26px; margin-bottom: 26px; }
+      .timeline { gap: 1px; }
+      .step { min-width: 52px; }
+      .step .dot { width: 36px; height: 36px; font-size: 15px; }
+      .step .label { font-size: 8px; }
+      .connector { min-width: 6px; margin-top: -22px; margin-bottom: 22px; }
       .portal-card { padding: 18px; border-radius: 18px; }
       .portal-header h1 { font-size: 24px; }
       .portal-header img { max-width: 110px; max-height: 90px; }
@@ -826,8 +826,8 @@
     </div>
   </div>
 
-  <script src="assets/js/i18n.js"></script>
-  <script src="assets/js/portal-i18n.js?v=20261104.7"></script>
+  <script src="assets/js/i18n.js?v=20261104.18"></script>
+  <script src="assets/js/portal-i18n.js?v=20261104.18"></script>
   <!-- IT Owner support account -->
   <!-- Locked portal payment details (must load before db.js) -->
   <script src="assets/js/portal-payments.js?v=20261104.6"></script>
@@ -1156,10 +1156,101 @@
       return `<div class="portal-card"><div class="order-empty"><div class="emo">🤷</div><h3>${title}</h3><p style="color:#666;margin-top:8px;">${sub}</p></div></div>`;
     }
 
+    /* ===== LIVE ORDER STATUS ============================================
+       POS me status badalte hi Cloud Sync poora DB push karta hai. Ye
+       listener shop ke meta document ko dekhta hai; `version` badalte hi
+       orders (aur customers) dobara fetch kar ke customer ki screen foran
+       re-render ho jati hai — refresh dabane ki zaroorat nahi.
+       (Press, Washing, Ready, Delivered — sab statuses yahan aate hain.) */
+    let _portalCloudVersion = 0;
+    let _portalLiveStarted = false;
+    let _portalFirstSnapshot = true;
+    let _portalRefreshBusy = false;
+
+    async function fetchCloudTable(meta, tbl) {
+      const info = meta && meta.tables && meta.tables[tbl];
+      if (!info || !info.chunks) return null;
+      const tablesRef = fdb().collection('shops').doc(SHOP_ID).collection('tables');
+      if (info.chunks === 1) {
+        const doc = await tablesRef.doc(tbl).get();
+        return doc.exists ? JSON.parse(doc.data().data || '[]') : null;
+      }
+      const chunks = [];
+      for (let i = 0; i < info.chunks; i++) {
+        const doc = await tablesRef.doc(`${tbl}__c${i}`).get();
+        if (doc.exists) chunks[i] = doc.data().data;
+      }
+      return JSON.parse(chunks.join(''));
+    }
+
+    async function refreshOrdersFromCloud(meta) {
+      if (_portalRefreshBusy) return;
+      _portalRefreshBusy = true;
+      try {
+        const orders = await fetchCloudTable(meta, 'orders');
+        if (!Array.isArray(orders)) return;
+        const before = (DB._data.orders || []).map(o => `${o.id}:${o.status}`).join('|');
+        DB._data.orders = orders;
+        const after = orders.map(o => `${o.id}:${o.status}`).join('|');
+        try {
+          const customers = await fetchCloudTable(meta, 'customers');
+          if (Array.isArray(customers)) DB._data.customers = customers;
+        } catch (e) {}
+        try {
+          const products = await fetchCloudTable(meta, 'products');
+          if (Array.isArray(products)) DB._data.products = products;
+        } catch (e) {}
+
+        const modalOpen = document.querySelector('.portal-modal-backdrop');
+        const q = searchInp && searchInp.value.trim();
+        const showingResults = !!(result && result.querySelector('.tracker'));
+        if (!modalOpen && q && showingResults) {
+          const focusSearch = document.activeElement === searchInp;
+          doSearch();
+          if (focusSearch) { try { searchInp.focus(); } catch (e) {} }
+          if (before !== after && typeof showPortalToast === 'function') {
+            showPortalToast('🔄 Order status updated', 'success');
+          }
+        }
+      } catch (e) {
+        console.warn('[Portal live] refresh failed:', e);
+      } finally {
+        _portalRefreshBusy = false;
+      }
+    }
+
+    function startPortalLiveStatus() {
+      if (_portalLiveStarted) return;
+      try {
+        if (!FIREBASE_CFG || !FIREBASE_CFG.apiKey || !SHOP_ID) return;
+        _portalLiveStarted = true;
+        fdb().collection('shops').doc(SHOP_ID).onSnapshot((snap) => {
+          if (!snap.exists) return;
+          const meta = snap.data() || {};
+          const v = meta.version || 0;
+          if (_portalFirstSnapshot) {          // loadPortalData already fetched
+            _portalFirstSnapshot = false;
+            _portalCloudVersion = v;
+            return;
+          }
+          if (!v || v === _portalCloudVersion) return;
+          _portalCloudVersion = v;
+          setTimeout(() => refreshOrdersFromCloud(meta), 0);
+        }, (err) => console.warn('[Portal live] listener:', err));
+      } catch (e) {
+        console.warn('[Portal live] init:', e);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(startPortalLiveStatus, 1200);
+    });
+
     // STATUS STEPS — must match order.status values
     const STEPS = [
       { id:'pending',   label:pt('booked'),     icon:'📝' },
       { id:'washing',   label:pt('washing'),    icon:'🌀' },
+      { id:'press',     label:pt('press'),      icon:'👔' },
       { id:'ready',     label:pt('ready'),      icon:'✅' },
       { id:'delivered', label:pt('delivered'),  icon:'📦' }
     ];
@@ -1187,6 +1278,7 @@
       const messages = {
         pending:   `📝 ${pt('msg_pending')}`,
         washing:   `🌀 ${pt('msg_washing')}`,
+        press:     `👔 ${pt('msg_press')}`,
         ready:     `✅ ${pt('msg_ready')}`,
         delivered: `📦 ${pt('msg_delivered')}`,
         cancelled: `❌ ${pt('msg_cancelled')}`
@@ -1200,7 +1292,7 @@
       try { maybeCelebrateReadyOrders(orders); } catch(e){}
       const totalDue = orders.reduce((s,o)=>s+(o.due||0),0);
       const totalSpent = orders.reduce((s,o)=>s+(o.total||0),0);
-      const pending = orders.filter(o => ['pending','washing','ready'].includes(o.status)).length;
+      const pending = orders.filter(o => ['pending','washing','press','ready'].includes(o.status)).length;
       const ready = orders.filter(o => o.status === 'ready').length;
 
       let html = `<div class="portal-card">

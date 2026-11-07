@@ -14,6 +14,7 @@ function renderOrders() {
           <option value="all">${t('ord.allStatus')}</option>
           <option value="pending">⏳ ${t('status.pending')}</option>
           <option value="washing">🌀 ${t('status.washing')}</option>
+          <option value="press">👔 ${t('status.press')}</option>
           <option value="ready">✅ ${t('status.ready')}</option>
           <option value="delivered">📦 ${t('status.delivered')}</option>
           <option value="cancelled">❌ ${t('status.cancelled')}</option>
@@ -187,6 +188,7 @@ function openStatusChange(orderId) {
         <select id="newStatus">
           <option value="pending"   ${o.status==='pending'?'selected':''}>⏳ Pending</option>
           <option value="washing"   ${o.status==='washing'?'selected':''}>🌀 Washing</option>
+          <option value="press"     ${o.status==='press'?'selected':''}>👔 Press</option>
           <option value="ready"     ${o.status==='ready'?'selected':''}>✅ Ready for Pickup</option>
           <option value="delivered" ${o.status==='delivered'?'selected':''}>📦 Delivered</option>
           <option value="cancelled" ${o.status==='cancelled'?'selected':''}>❌ Cancelled</option>
@@ -224,7 +226,9 @@ function openStatusChange(orderId) {
       if (newStatus === 'ready') patch.location = $('#newRack', m).value.trim();
       
       DB.update('orders', orderId, patch);
-      if (typeof maybePromptWhatsAppOnStatus === 'function' && oldStatus !== newStatus && !sessionStorage.getItem('mrLaundryWaPause')) {
+      const waPaused = !!sessionStorage.getItem('mrLaundryWaPause');
+      /* Press notification must never be silently skipped by "don't ask today". */
+      if (typeof maybePromptWhatsAppOnStatus === 'function' && oldStatus !== newStatus && (!waPaused || newStatus === 'press')) {
         setTimeout(() => maybePromptWhatsAppOnStatus(orderId, newStatus, oldStatus), 300);
       }
       closeModal(); toast('Order updated','success'); renderOrdersBody();
@@ -295,7 +299,7 @@ function openEditInvoice(orderId) {
       <div class="field">
         <label>Status</label>
         <select id="eStatus">
-          ${['pending','washing','ready','delivered','cancelled'].map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}
+          ${[['pending','⏳ Pending'],['washing','🌀 Washing'],['press','👔 Press'],['ready','✅ Ready for Pickup'],['delivered','📦 Delivered'],['cancelled','❌ Cancelled']].map(([v,l])=>`<option value="${v}" ${o.status===v?'selected':''}>${l}</option>`).join('')}
         </select>
       </div>
     </div>

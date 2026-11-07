@@ -738,6 +738,7 @@ function openPaymentDialog(orderMeta) {
         <select id="payStatus">
           <option value="pending" selected>⏳ Pending</option>
           <option value="washing">🌀 Washing</option>
+          <option value="press">👔 Press</option>
           <option value="ready">✅ Ready</option>
           <option value="delivered">📦 Delivered</option>
         </select>

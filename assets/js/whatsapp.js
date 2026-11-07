@@ -14,6 +14,11 @@ const WA_STATUS_TEMPLATES = {
     icon: '🌀',
     template: `Hello {name}, your clothes are now being washed 🌀\n\nInvoice: {invoice}\nExpected Delivery: {delivery}\n\nThank you,\n{shop}`
   },
+  press: {
+    label: 'Press / Ironing',
+    icon: '👔',
+    template: `Assalam-o-Alaikum {name}! 👔\n\nAap ke kapre PRESS ho gaye hain — ironing / press complete ✅\n\nInvoice: {invoice}\nTotal Pcs: {pcs}\nExpected Delivery: {delivery}\n\nAb bas final checking aur packing ke baad order pickup ke liye tayyar ho jayega, tab hum aap ko dobara inform kar denge.\n\nShukriya!\n{shop}\n📞 {phone}`
+  },
   ready: {
     label: 'Ready for Pickup',
     icon: '✅',
@@ -34,7 +39,12 @@ const WA_STATUS_TEMPLATES = {
 function maybePromptWhatsAppOnStatus(orderId, newStatus, oldStatus) {
   if (newStatus === oldStatus) return;
   const s = DB.settings();
-  if (s.whatsappAutoPrompt === false) return;
+  /* Press updates are always offered — the client explicitly wants the
+     customer informed the moment ironing finishes. A shop can still opt out
+     with `whatsappPressPrompt: false`. Other statuses respect the global
+     "Auto-prompt" switch. */
+  const forcePress = (newStatus === 'press' && s.whatsappPressPrompt !== false);
+  if (s.whatsappAutoPrompt === false && !forcePress) return;
 
   const o = DB.get('orders', orderId);
   if (!o) return;
@@ -140,9 +150,13 @@ function openWhatsAppTemplateEditor() {
     <h3>📱 WhatsApp Status Templates</h3>
     <p class="sub">Customize messages for each status. Use {name} {shop} {invoice} {pcs} {total} {paid} {due} {delivery} {phone} {address}.</p>
 
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:14px;padding:10px;background:var(--surface-alt);border-radius:8px;">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;padding:10px;background:var(--surface-alt);border-radius:8px;">
       <input type="checkbox" id="waAutoPrompt" ${s.whatsappAutoPrompt!==false?'checked':''}/>
       <b>Auto-prompt WhatsApp when order status changes</b>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:14px;padding:10px;background:#f3e8ff;border-radius:8px;">
+      <input type="checkbox" id="waPressPrompt" ${s.whatsappPressPrompt!==false?'checked':''}/>
+      <b>👔 Always offer the Press message</b> <span style="font-size:11px;color:var(--text-soft);">(even when the general auto-prompt is off)</span>
     </label>
 
     ${Object.entries(WA_STATUS_TEMPLATES).map(([key, tpl]) => `
@@ -169,7 +183,8 @@ function openWhatsAppTemplateEditor() {
       });
       DB.saveSettings({
         whatsappStatusTemplates: templates,
-        whatsappAutoPrompt: $('#waAutoPrompt', m).checked
+        whatsappAutoPrompt: $('#waAutoPrompt', m).checked,
+        whatsappPressPrompt: $('#waPressPrompt', m).checked
       });
       toast('Templates saved','success');
       closeModal();

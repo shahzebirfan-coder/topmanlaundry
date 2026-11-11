@@ -171,6 +171,36 @@ function calcCartTotals() {
 }
 
 function renderCart() {
+  /* FOCUS GUARD: a full re-render used to replace the discount <input> on
+     every keystroke, so typing "50" produced only "5" and the cashier had to
+     click again (or use the spinner). Remember the focused field + caret and
+     put them back after every render — belt-and-braces for radio switches,
+     item edits, cloud refreshes, etc. */
+  const _ae = document.activeElement;
+  const _focusId = (_ae && _ae.id && /^(INPUT|TEXTAREA|SELECT)$/.test(_ae.tagName)) ? _ae.id : null;
+  let _selStart = null, _selEnd = null;
+  let _restoringFocus = false;
+  try {
+    if (_focusId && typeof _ae.selectionStart === 'number') {
+      _selStart = _ae.selectionStart; _selEnd = _ae.selectionEnd;
+    }
+  } catch (e) {}
+  const _restoreFocus = () => {
+    if (!_focusId) return;
+    const again = document.getElementById(_focusId);
+    if (!again) return;
+    _restoringFocus = true;
+    try { again.focus({ preventScroll: true }); } catch (e) {}
+    _restoringFocus = false;
+    /* onfocus normally selects all; that is suppressed while restoring,
+       then the saved caret is put back exactly where it was. */
+    try {
+      if (_selStart != null && typeof again.setSelectionRange === 'function') {
+        again.setSelectionRange(_selStart, _selEnd);
+      }
+    } catch (e) {}
+  };
+
   const items = posState.cart;
   const cust = DB.get('customers', posState.customerId);
   
@@ -191,6 +221,7 @@ function renderCart() {
   if (!items.length) {
     $('#cartItems').innerHTML = `<div class="cart-empty"><div class="emoji">🛒</div><div>Cart is empty<br><small>Tap a product to add it</small></div></div>`;
     $('#cartSummary').innerHTML = `<button class="btn btn-primary btn-block btn-lg" disabled>${t('pos.bookOrderArrow')}</button>`;
+    _restoreFocus();
     return;
   }
 
@@ -269,14 +300,21 @@ function renderCart() {
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:12px;color:var(--text-soft);flex:1;">Discount</span>
-        <input type="number" id="discValueInput" value="${posState.discountValue}" min="0" style="width:90px;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);" />
-        <span style="font-size:12px;width:14px;">${posState.discountType==='percent'?'%':''}</span>
+        <input type="text" id="discValueInput" value="${posState.discountValue}" min="0" step="any"
+          inputmode="decimal" autocomplete="off" placeholder="0" title="Poora number aik baar mein likhein, e.g. 50"
+          style="width:110px;text-align:right;padding:8px 10px;font-size:15px;font-weight:700;border:1px solid var(--border);border-radius:6px;background:var(--surface);" />
+        <span id="discUnit" style="font-size:12px;width:14px;">${posState.discountType==='percent'?'%':''}</span>
       </div>
-      ${tot.manualDiscount>0?`<div style="font-size:11px;color:var(--text-soft);text-align:right;margin-top:4px;">= − ${fmtMoney(tot.manualDiscount)}</div>`:''}
+      <div id="discComputedRow" style="font-size:11px;color:var(--text-soft);text-align:right;margin-top:4px;display:${tot.manualDiscount>0?'block':'none'};">= − <span id="discComputedVal">${fmtMoney(tot.manualDiscount)}</span></div>
+      <div id="discQuickRow" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
+        ${(posState.discountType==='percent' ? [5,10,25,50] : [50,100,200,500]).map(v => `<button type="button" class="disc-quick" data-v="${v}" style="font-size:11px;font-weight:700;padding:4px 9px;border:1px solid var(--border);border-radius:20px;background:var(--primary-light);color:var(--primary);cursor:pointer;">${posState.discountType==='percent'? v+'%' : cur+' '+v}</button>`).join('')}
+        <button type="button" class="disc-quick" data-v="0" style="font-size:11px;font-weight:700;padding:4px 9px;border:1px solid var(--border);border-radius:20px;background:var(--surface);color:var(--text-soft);cursor:pointer;">🧹 Clear</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-soft);margin-top:5px;">💡 Poora number aik hi baar mein likhein (e.g. <b>50</b>) — cursor ab nahi hat-ta.</div>
     </div>
 
-    ${tot.loyaltyDiscount>0?`<div class="row" style="color:var(--success);"><span>⭐ Loyalty (${tot.loyaltyPercent}%)</span><span>− ${fmtMoney(tot.loyaltyDiscount)}</span></div>`:''}
-    ${tot.taxPercent>0?`<div class="row"><span>Tax (${tot.taxPercent}%)</span><span>${fmtMoney(tot.tax)}</span></div>`:''}
+    <div class="row" id="loyaltyRow" style="color:var(--success);display:${tot.loyaltyDiscount>0?'flex':'none'};"><span id="loyaltyLabel">⭐ Loyalty (${tot.loyaltyPercent}%)</span><span id="loyaltyVal">− ${fmtMoney(tot.loyaltyDiscount)}</span></div>
+    <div class="row" id="taxRow" style="display:${tot.taxPercent>0?'flex':'none'};"><span id="taxLabel">Tax (${tot.taxPercent}%)</span><span id="taxVal">${fmtMoney(tot.tax)}</span></div>
 
     <div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:8px;margin:6px 0;">
       <div style="display:flex;align-items:center;gap:8px;">
@@ -294,31 +332,72 @@ function renderCart() {
     <div class="row total"><span>Total</span><span class="v" id="cartTotalVal">${fmtMoney(tot.total)}</span></div>
     <button class="btn btn-primary btn-block btn-lg" id="checkoutBtn" style="margin-top:10px;">${t('pos.bookOrderArrow')}</button>
   `;
-  $$('input[name="discType"]').forEach(r => r.onchange = e => { posState.discountType = e.target.value; renderCart(); });
-  $('#discValueInput').oninput = e => { posState.discountValue = Math.max(0, parseFloat(e.target.value)||0); renderCart(); };
-
-  /* Live update WITHOUT re-rendering the cart (keeps focus in the input). */
-  const refreshPdTotals = () => {
+  /* One shared live updater: recalculates and touches ONLY the summary
+     numbers. NO innerHTML replacement, so focus + caret never move. */
+  const refreshCartTotals = () => {
     const t2 = calcCartTotals();
-    const row = $('#pdSummaryRow');
-    if (row) row.style.display = t2.pickupDeliveryCharges > 0 ? 'flex' : 'none';
-    const pv = $('#pdSummaryVal'); if (pv) pv.textContent = '+ ' + fmtMoney(t2.pickupDeliveryCharges);
-    const tv = $('#cartTotalVal'); if (tv) tv.textContent = fmtMoney(t2.total);
+    const txt = (id, v) => { const el = $('#' + id); if (el) el.textContent = v; };
+    const show = (id, on, mode) => { const el = $('#' + id); if (el) el.style.display = on ? mode : 'none'; };
+    txt('discComputedVal', fmtMoney(t2.manualDiscount));
+    show('discComputedRow', t2.manualDiscount > 0, 'block');
+    txt('loyaltyLabel', '⭐ Loyalty (' + t2.loyaltyPercent + '%)');
+    txt('loyaltyVal', '− ' + fmtMoney(t2.loyaltyDiscount));
+    show('loyaltyRow', t2.loyaltyDiscount > 0, 'flex');
+    txt('taxLabel', 'Tax (' + t2.taxPercent + '%)');
+    txt('taxVal', fmtMoney(t2.tax));
+    show('taxRow', t2.taxPercent > 0, 'flex');
+    txt('pdSummaryVal', '+ ' + fmtMoney(t2.pickupDeliveryCharges));
+    show('pdSummaryRow', t2.pickupDeliveryCharges > 0, 'flex');
+    txt('cartTotalVal', fmtMoney(t2.total));
   };
+
+  $$('input[name="discType"]').forEach(r => r.onchange = e => {
+    posState.discountType = e.target.value;
+    renderCart();                 // quick chips + % unit must change; focus guard restores caret
+  });
+
+  const discInp = $('#discValueInput');
+  if (discInp) {
+    discInp.onfocus = () => { if (_restoringFocus) return; try { discInp.select(); } catch (e) {} };
+    discInp.oninput = e => {
+      /* Keep the RAW text while typing ("5" -> "50"); never rewrite it here. */
+      posState.discountValue = Math.max(0, parseFloat(e.target.value) || 0);
+      refreshCartTotals();
+    };
+    discInp.onblur = e => {
+      posState.discountValue = Math.max(0, parseFloat(e.target.value) || 0);
+      e.target.value = posState.discountValue;   // normalise "050" -> 50
+      refreshCartTotals();
+    };
+    discInp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); discInp.blur(); } };
+  }
+
+  /* One-tap quick values — still leaves the caret in the input. */
+  $$('.disc-quick').forEach(btn => btn.onclick = () => {
+    const v = Math.max(0, parseFloat(btn.dataset.v) || 0);
+    posState.discountValue = v;
+    if (discInp) {
+      discInp.value = v;
+      refreshCartTotals();
+      try { discInp.focus({ preventScroll: true }); discInp.select(); } catch (e) {}
+    }
+  });
+
   const pdInp = $('#pdChargesInput');
   if (pdInp) {
-    pdInp.onfocus = () => pdInp.select();
+    pdInp.onfocus = () => { if (_restoringFocus) return; try { pdInp.select(); } catch (e) {} };
     pdInp.oninput = e => {
       posState.pickupDeliveryCharges = Math.max(0, parseFloat(e.target.value) || 0);
-      refreshPdTotals();
+      refreshCartTotals();
     };
     pdInp.onblur = e => {
       posState.pickupDeliveryCharges = Math.max(0, parseFloat(e.target.value) || 0);
       e.target.value = posState.pickupDeliveryCharges;
-      refreshPdTotals();
+      refreshCartTotals();
     };
   }
   $('#checkoutBtn').onclick = openBookingForm;
+  _restoreFocus();
 }
 
 /* ===== CUSTOMER PICKER ===== */

@@ -17,6 +17,7 @@ function renderDrawings() {
 
   // Calculate balances by source
   const balances = calculateAllBalances();
+  const recon = balanceReconciliation();
 
   const content = `
     <h1 class="page-title">👤 Owner Drawings — Personal Withdrawals</h1>
@@ -29,7 +30,8 @@ function renderDrawings() {
         <div>
           <div class="lbl">Cash Drawer Balance</div>
           <div class="val" style="color:#16a34a;">${fmtMoney(balances.cash)}</div>
-          <div class="lbl" style="font-size:10px;">Physical cash in shop</div>
+          <div class="lbl" style="font-size:10px;">Cash − expenses − withdrawals</div>
+          <div class="lbl" style="font-size:10px;">Physical cash in shop (all time)</div>
         </div>
       </div>
       <div class="stat-card" style="background:linear-gradient(135deg,#fef3c7,#fffbeb);border-left:4px solid #f59e0b;">
@@ -57,6 +59,8 @@ function renderDrawings() {
         </div>
       </div>
     </div>
+
+    ${balanceReconciliationHtml(recon)}
 
     <!-- Summary cards -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;">
@@ -453,6 +457,110 @@ function calculateAllBalances() {
   };
 }
 
+/* ============================================================
+   RECONCILIATION — "Dashboard Received" vs "Cash Drawer Balance"
+   The two cards measure DIFFERENT things. Nothing is lost; this just
+   makes the arithmetic visible so a client can verify it in one glance.
+     • Dashboard "Received" = paid on orders BOOKED this month (all methods)
+     • Cash Drawer Balance  = ALL-TIME cash received − ALL-TIME business
+                              expenses − ALL-TIME cash withdrawals
+   No calculation in calculateAllBalances() is changed by this helper.
+   ============================================================ */
+function balanceReconciliation() {
+  const b = (typeof calculateAllBalances === 'function') ? calculateAllBalances() : null;
+  if (!b) return null;
+  const orders = DB.all('orders');
+  const expenses = DB.all('expenses');
+  const monthKey = isoDay().slice(0, 7);
+
+  /* Exactly the same formula as renderDashboard()'s "Received" card. */
+  const monthOrders = orders.filter(o => (o.createdAt || '').slice(0, 7) === monthKey);
+  const dashboardReceived = monthOrders.reduce((s,o) => s + (o.paid || 0), 0);
+  const monthExpenses = expenses
+    .filter(e => (e.date || (e.createdAt || '').slice(0,10) || '').slice(0,7) === monthKey)
+    .reduce((s,e) => s + (e.amount || 0), 0);
+
+  const cashReceived   = b.receivedBySource.cash || 0;
+  const cashWithdrawn  = b.withdrawnBySource.cash || 0;
+  const otherMethods   = b.totalReceived - cashReceived;
+  /* All-time cash minus this month's "Received" — covers older months'
+     cash and payments that arrived by non-cash methods. */
+  const periodAdjustment = cashReceived - dashboardReceived;
+
+  return Object.assign({}, b, {
+    dashboardReceived, monthExpenses,
+    priorExpenses: b.totalExpenses - monthExpenses,
+    cashReceived, cashWithdrawn, otherMethods, periodAdjustment,
+    difference: dashboardReceived - b.cash,
+    drawerFormulaOk: Math.abs((cashReceived - b.totalExpenses - cashWithdrawn) - b.cash) < 0.01,
+    reconcileOk: Math.abs((dashboardReceived + periodAdjustment - b.totalExpenses - cashWithdrawn) - b.cash) < 0.01
+  });
+}
+
+function balanceReconciliationHtml(r) {
+  if (!r) return '';
+  const signed = v => (v >= 0 ? '+ ' : '− ') + fmtMoney(Math.abs(v));
+  const row = (label, value, color, bold) =>
+    `<tr${bold?' style="background:#f8faff;"':''}><td style="padding:8px 10px;border-bottom:1px solid var(--border);${bold?'font-weight:800;':''}">${label}</td>` +
+    `<td style="padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;${bold?'font-weight:900;font-size:15px;':''}${color?'color:'+color+';':''}">${value}</td></tr>`;
+
+  return `
+    <div class="card" id="balanceReconciliation" style="margin-bottom:18px;border-left:4px solid #4f7cff;background:linear-gradient(180deg,#f8faff,#fff);">
+      <div style="font-weight:800;font-size:15px;margin-bottom:6px;">🧾 Dashboard "Received" aur Cash Drawer mein farq kyun?</div>
+      <div style="font-size:12px;color:var(--text-soft);margin-bottom:12px;">
+        Dono <b>alag metrics</b> hain — koi paisa gum nahi hua. Dashboard wala card <b>is mahine</b> aur
+        <b>tamam payment methods</b> ka hai; Cash Drawer <b>poore time</b> ki <b>sirf cash</b> ka hai,
+        jis se business expenses aur withdrawals bhi ghatae jate hain.
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:14px;">
+        <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;">
+          <div style="font-size:11px;color:var(--text-soft);">Dashboard "Received"</div>
+          <div style="font-size:20px;font-weight:900;color:var(--success);">${fmtMoney(r.dashboardReceived)}</div>
+          <div style="font-size:10px;color:var(--text-soft);">This month • all methods</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;">
+          <div style="font-size:11px;color:var(--text-soft);">Cash Drawer Balance</div>
+          <div style="font-size:20px;font-weight:900;color:#16a34a;">${fmtMoney(r.cash)}</div>
+          <div style="font-size:10px;color:var(--text-soft);">All time • cash only</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;">
+          <div style="font-size:11px;color:var(--text-soft);">Difference</div>
+          <div style="font-size:20px;font-weight:900;color:#4f7cff;">${fmtMoney(r.difference)}</div>
+          <div style="font-size:10px;color:var(--text-soft);">Neeche poori breakdown 👇</div>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="tbl" style="width:100%;font-size:13px;border-collapse:collapse;">
+          <tbody>
+            ${row('📥 Dashboard "Received" <small style="color:var(--text-soft);">(orders booked this month, all methods)</small>', fmtMoney(r.dashboardReceived), '#16a34a')}
+            ${row('🔄 Period / method adjustment <small style="color:var(--text-soft);">(all-time cash minus above; purane months + non-cash)</small>', signed(r.periodAdjustment), r.periodAdjustment >= 0 ? '#16a34a' : '#dc2626')}
+            ${row('💸 Business expenses <small style="color:var(--text-soft);">(ALL TIME, cash se paid maana gaya)</small>', '− ' + fmtMoney(r.totalExpenses), '#dc2626')}
+            ${row('📤 Cash withdrawals <small style="color:var(--text-soft);">(ALL TIME)</small>', '− ' + fmtMoney(r.cashWithdrawn), '#ea580c')}
+            ${row('= 💵 Cash Drawer Balance', fmtMoney(r.cash), '#16a34a', true)}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:12px;font-size:11px;color:var(--text-soft);line-height:1.6;">
+        💡 <b>Seedha formula:</b> Cash received (all time) <b>${fmtMoney(r.cashReceived)}</b>
+        − Expenses <b>${fmtMoney(r.totalExpenses)}</b>
+        − Withdrawals <b>${fmtMoney(r.cashWithdrawn)}</b>
+        = <b>${fmtMoney(r.cash)}</b>.<br>
+        Is mahine ke kharchay <b>${fmtMoney(r.monthExpenses)}</b>, baqi purane months ke <b>${fmtMoney(r.priorExpenses)}</b> hain.
+        Cash ke alawa methods (card / JazzCash / Easypaisa / Bank / online) all-time <b>${fmtMoney(r.otherMethods)}</b> —
+        ye cash drawer mein nahi, apne apne source balance mein jate hain.<br>
+        ⚠️ <b>Note:</b> expenses abhi poori <i>amount</i> se cash drawer ghatae jate hain (chahe expense
+        "Unpaid/Partial" ho ya kisi aur source se paid ho) — ye purana design hai. Source-wise ya
+        sirf paid-amount wala chahiye to alag change hoga; upar wali calculation isi design ke mutabiq hai.
+      </div>
+    </div>
+  `;
+}
+
 window.calculateAllBalances = calculateAllBalances;
+window.balanceReconciliation = balanceReconciliation;
+window.balanceReconciliationHtml = balanceReconciliationHtml;
 window.openDrawingForm = openDrawingForm;
 window.printDrawingReceipt = printDrawingReceipt;

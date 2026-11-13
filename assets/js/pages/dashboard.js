@@ -261,7 +261,11 @@ function renderDashboard() {
       </div>
       <div class="stat-card">
         <div class="ic b2">✅</div>
-        <div><div class="lbl">Received</div><div class="val" style="color:var(--success);">${fmtMoney(monthReceived)}</div></div>
+        <div>
+          <div class="lbl">Received</div>
+          <div class="val" style="color:var(--success);">${fmtMoney(monthReceived)}</div>
+          <div class="lbl" style="font-size:10px;">This month's orders • all methods</div>
+        </div>
       </div>
       <div class="stat-card">
         <div class="ic ${monthProfit>=0?'b2':'b3'}">📊</div>
@@ -278,13 +282,14 @@ function renderDashboard() {
       if (typeof calculateAllBalances !== 'function') return '';
       const b = calculateAllBalances();
       return `
-        <div class="section-title">💰 Money Balance by Source</div>
+        <div class="section-title">💰 Money Balance by Source <span style="font-size:12px;font-weight:500;color:var(--text-soft);">(all time • cash after expenses &amp; withdrawals)</span></div>
         <div class="grid-stats" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:18px;">
           <div class="stat-card stat-clickable" onclick="app.go('drawings')" style="background:linear-gradient(135deg,#dcfce7,#f0fdf4);border-left:4px solid #22c55e;">
             <div class="ic" style="background:#22c55e;color:#fff;">💵</div>
             <div>
               <div class="lbl">Cash Drawer</div>
               <div class="val" style="color:#16a34a;">${fmtMoney(b.cash)}</div>
+              <div class="lbl" style="font-size:10px;">Cash − expenses − withdrawals</div>
               <div class="lbl" style="font-size:10px;">Available for withdrawal</div>
             </div>
           </div>

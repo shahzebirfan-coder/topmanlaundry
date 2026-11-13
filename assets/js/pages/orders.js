@@ -199,10 +199,32 @@ function openStatusChange(orderId) {
         <input type="text" id="newRack" placeholder="e.g. Rack A1, Shelf 3" value="${escapeHtml(o.location||'')}"/>
         <small style="color:var(--text-soft);">Helps you find clothes instantly when customer arrives.</small>
       </div>
-      <div class="field">
-        <label>Receive Additional Payment</label>
-        <input type="number" id="addPay" value="${o.due}" min="0" max="${o.due}"/>
+      <div class="field" style="background:var(--surface-alt);padding:10px;border-radius:8px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;">
+          <input type="checkbox" id="statusPayToggle"/>
+          💵 Customer ne ABHI payment di hai? <span style="font-weight:400;color:var(--text-soft);">(optional)</span>
+        </label>
+        <div style="font-size:11px;color:var(--text-soft);margin:6px 0 8px;">
+          Status badalne ke liye payment zaroori nahi. Agar payment nahi mili to ye <b>OFF</b> aur field
+          <b>khaali</b> chhod dein — Save par <b>sirf status</b> update hoga.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="number" id="addPay" value="" min="0" max="${o.due}" step="any" placeholder="0 — payment milne par likhein"
+            autocomplete="off" disabled style="width:190px;padding:8px;border:1px solid var(--border);border-radius:6px;"/>
+          <select id="statusPayMethod" disabled style="padding:8px;border:1px solid var(--border);border-radius:6px;">
+            <option value="cash">💵 Cash</option>
+            <option value="jazzcash">📱 JazzCash</option>
+            <option value="easypaisa">📱 Easypaisa</option>
+            <option value="bank">🏦 Bank</option>
+            <option value="card">💳 Card</option>
+            <option value="cheque">🧾 Cheque</option>
+          </select>
+        </div>
         <small style="color:var(--text-soft);">Current Paid: <b>${fmtMoney(o.paid)}</b> • Remaining Due: <b style="color:var(--danger);">${fmtMoney(o.due)}</b></small>
+        <div id="statusPayWarn" style="display:none;margin-top:8px;font-size:11px;color:#b45309;background:#fffbeb;padding:8px;border-radius:6px;">
+          ⚠️ Ye amount <b>payment ke tor par record</b> hoga (paymentsLog + ledger). Sirf tab likhein jab paisa
+          haath mein ya account mein aa gaya ho.
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -215,23 +237,78 @@ function openStatusChange(orderId) {
       $('#rackField', m).style.display = e.target.value === 'ready' ? 'block' : 'none';
       if (e.target.value === 'ready') setTimeout(()=>$('#newRack', m).focus(), 100);
     };
+
+    /* PAYMENT GATE — no amount is ever pre-filled. The field stays disabled
+       until the cashier explicitly confirms that money was ACTUALLY received.
+       This stops the old bug where o.due was pre-filled and a quick "Save"
+       silently marked the order as paid. */
+    const payToggle  = $('#statusPayToggle', m);
+    const addPayInp  = $('#addPay', m);
+    const payMethod  = $('#statusPayMethod', m);
+    const payWarn    = $('#statusPayWarn', m);
+    const setPayState = () => {
+      const on = !!payToggle.checked;
+      addPayInp.disabled = !on;
+      payMethod.disabled = !on;
+      payWarn.style.display = on ? 'block' : 'none';
+      if (!on) addPayInp.value = '';       // never keep a stale amount
+      else setTimeout(() => { try { addPayInp.focus({ preventScroll:true }); } catch(e){} }, 0);
+    };
+    payToggle.onchange = setPayState;
+    setPayState();
+
     $('#cancelBtn', m).onclick = closeModal;
     $('#saveBtn', m).onclick = () => {
       const newStatus = $('#newStatus', m).value;
-      const addPay = Math.max(0, +$('#addPay', m).value || 0);
-      const paid = Math.min(o.total, o.paid + addPay);
-      const due = o.total - paid;
       const oldStatus = o.status;
-      const patch = { status: newStatus, paid, due, isCredit: due > 0 };
+      const fresh = DB.get('orders', orderId) || o;   // avoid stale cloud values
+      const payOn = !!payToggle.checked;
+      const rawAmt = payOn ? (parseFloat(addPayInp.value) || 0) : 0;
+      const addPay = Math.max(0, Math.min(Math.max(0, fresh.due || 0), rawAmt));
+
+      /* Default path: ONLY status (and rack when Ready). paid / due /
+         paymentsLog are deliberately NOT touched. */
+      const patch = { status: newStatus };
       if (newStatus === 'ready') patch.location = $('#newRack', m).value.trim();
-      
+
+      if (addPay > 0) {
+        const msg = `${fmtMoney(addPay)} ki payment ABHI receive hui hai?\n\n` +
+          `Ye amount payment ke tor par record ho jayegi. Cancel dabane par sirf status update hoga.`;
+        if (typeof confirm === 'function' && !confirm(msg)) return;
+
+        const method = payMethod.value || 'cash';
+        const paid = Math.min(fresh.total || 0, (fresh.paid || 0) + addPay);
+        const due = (fresh.total || 0) - paid;
+        const paymentsLog = Array.isArray(fresh.paymentsLog) ? [...fresh.paymentsLog] : [];
+        paymentsLog.push({
+          id: 'pay_' + Date.now().toString(36) + Math.floor(Math.random()*1000),
+          amount: addPay,
+          method,
+          note: 'Received while updating order status',
+          by: DB.currentUser()?.username || 'unknown',
+          byName: DB.currentUser()?.name || '',
+          at: new Date().toISOString()
+        });
+        Object.assign(patch, {
+          paid, due, isCredit: due > 0,
+          paymentMethod: method,
+          paymentsLog
+        });
+        if (typeof logAction === 'function') {
+          logAction('payment.receive', `INV-${fresh.invoiceNo||orderId.slice(-6)}: ${fmtMoney(addPay)} via ${method} (status update)`);
+        }
+        if (typeof SoundFX !== 'undefined') { try { SoundFX.play('cash'); } catch(e){} }
+      }
+
       DB.update('orders', orderId, patch);
       const waPaused = !!sessionStorage.getItem('mrLaundryWaPause');
       /* Press notification must never be silently skipped by "don't ask today". */
       if (typeof maybePromptWhatsAppOnStatus === 'function' && oldStatus !== newStatus && (!waPaused || newStatus === 'press')) {
         setTimeout(() => maybePromptWhatsAppOnStatus(orderId, newStatus, oldStatus), 300);
       }
-      closeModal(); toast('Order updated','success'); renderOrdersBody();
+      closeModal();
+      toast(addPay > 0 ? `Status updated + ${fmtMoney(addPay)} received` : 'Order updated','success');
+      renderOrdersBody();
     };
   }});
 }

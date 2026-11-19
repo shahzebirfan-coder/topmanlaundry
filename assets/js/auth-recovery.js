@@ -60,11 +60,18 @@ function openAdminResetPassword(userId) {
       if (!np) { toast('Enter a password','error'); return; }
       if (np !== cp) { toast('Passwords do not match','error'); return; }
       if (np.length < 4) { toast('Password too short (min 4 chars)','error'); return; }
-      DB.update('users', userId, { password: np });
-      if (typeof logAction === 'function') logAction('user.passwordReset', `${u.username} reset by admin`);
+      if (typeof DB.setUserPassword === 'function') DB.setUserPassword(userId, np, { via: 'admin reset' });
+      else DB.update('users', userId, { password: np });
       toast(`✅ Password reset for ${u.name}`, 'success');
       closeModal();
       if (typeof renderUsersBody === 'function') renderUsersBody();
+      /* Show the exact credentials so the admin can read them out to the user
+         (a toast disappears — and then "login nahi ho raha" calls start). */
+      setTimeout(() => {
+        try {
+          alert('🔑 Password reset ho gaya!\n\nUser ID: ' + u.username + '\nNaya Password: ' + np + '\n\nUser ko yehi details dein.');
+        } catch (e) {}
+      }, 150);
     };
   }});
 }
@@ -76,6 +83,24 @@ function openForgotPassword() {
     <p class="sub">Choose how you want to recover access:</p>
 
     <div style="display:flex;flex-direction:column;gap:10px;">
+
+      <button class="recovery-option" data-method="rescue" style="border-color:#bbf7d0;background:#f0fdf4;">
+        <div style="font-size:28px;">🆘</div>
+        <div style="flex:1;text-align:left;">
+          <div style="font-weight:700;">IT Rescue Code <span style="font-size:10px;background:#16a34a;color:#fff;padding:2px 6px;border-radius:20px;vertical-align:middle;">RECOMMENDED</span></div>
+          <small style="color:var(--text-soft);">IT support se aaj ka 8-character code lein — phir naya password khud set karein</small>
+        </div>
+        <div>→</div>
+      </button>
+
+      <button class="recovery-option" data-method="usernames">
+        <div style="font-size:28px;">👤</div>
+        <div style="flex:1;text-align:left;">
+          <div style="font-weight:700;">Mera User ID kya hai?</div>
+          <small style="color:var(--text-soft);">Is device ke user IDs dekhein (password show nahi hota)</small>
+        </div>
+        <div>→</div>
+      </button>
 
       <button class="recovery-option" data-method="security">
         <div style="font-size:28px;">❓</div>
@@ -125,16 +150,24 @@ function openForgotPassword() {
       .recovery-option:hover { border-color:#4f7cff;background:#f0f7ff;transform:translateY(-1px); }
     </style>
 
-    <div class="modal-footer">
+    <div class="modal-footer" style="justify-content:space-between;">
       <button class="btn btn-ghost" onclick="closeModal()">← Back to Login</button>
+      <button class="btn btn-ghost btn-sm" id="forgotItGen" style="font-size:11px;opacity:.65;">🔐 IT staff? Rescue code banayein</button>
     </div>
   `, { large: true, onOpen(m) {
+    const itGen = $('#forgotItGen', m);
+    if (itGen) itGen.onclick = () => {
+      if (typeof openRescueCodeGenerator === 'function') openRescueCodeGenerator();
+    };
+
     $$('.recovery-option', m).forEach(btn => {
       btn.onclick = () => {
         const method = btn.dataset.method;
         closeModal();
         setTimeout(() => {
-          if (method === 'security') openSecurityQuestionRecovery();
+          if (method === 'rescue') { (typeof openRescueReset === 'function') ? openRescueReset() : openForgotPassword(); }
+          else if (method === 'usernames') { (typeof openShowUserIds === 'function') ? openShowUserIds() : openForgotPassword(); }
+          else if (method === 'security') openSecurityQuestionRecovery();
           else if (method === 'master') openMasterCodeRecovery();
           else if (method === 'backup') openBackupRecovery();
           else if (method === 'contact') showAdminContactInfo();
@@ -245,7 +278,8 @@ function openSecurityQuestionRecovery() {
         if (!np) { msg('Enter new password','error'); return; }
         if (np !== np2) { msg('Passwords do not match','error'); return; }
         if (np.length < 4) { msg('Password too short (min 4 chars)','error'); return; }
-        DB.update('users', foundUser.id, { password: np });
+        if (typeof DB.setUserPassword === 'function') DB.setUserPassword(foundUser.id, np, { via: 'security question' });
+        else DB.update('users', foundUser.id, { password: np });
         try {
           DB._data.auditLog = DB._data.auditLog || [];
           DB._data.auditLog.push({
@@ -359,7 +393,8 @@ function openMasterCodeRecovery() {
         const np2 = $('#mcNewPass2', m).value;
         if (!np || np !== np2) { msg('Passwords must match','error'); return; }
         if (np.length < 4) { msg('Min 4 chars','error'); return; }
-        DB.update('users', foundUser.id, { password: np });
+        if (typeof DB.setUserPassword === 'function') DB.setUserPassword(foundUser.id, np, { via: 'security question' });
+        else DB.update('users', foundUser.id, { password: np });
         try {
           DB._data.auditLog = DB._data.auditLog || [];
           DB._data.auditLog.push({
@@ -524,7 +559,8 @@ function openChangeMyPassword() {
       if (fullUser.password !== oldp) { toast('❌ Current password is wrong', 'error'); return; }
       if (!newp || newp.length < 4) { toast('New password too short', 'error'); return; }
       if (newp !== newp2) { toast('Passwords do not match', 'error'); return; }
-      DB.update('users', user.id, { password: newp });
+      if (typeof DB.setUserPassword === 'function') DB.setUserPassword(user.id, newp, { via: 'self change' });
+      else DB.update('users', user.id, { password: newp });
       if (typeof logAction === 'function') logAction('user.passwordChange', 'Changed own password');
       toast('✅ Password changed!', 'success');
       closeModal();

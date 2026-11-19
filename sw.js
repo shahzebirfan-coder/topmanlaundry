@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mr-laundry-pos-v40';
+const CACHE_NAME = 'mr-laundry-pos-v41';
 const urlsToCache = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const urlsToCache = [
   './assets/img/holidays/jinnah-1945.jpg',
   './assets/js/app.js',
   './assets/js/auth-recovery.js',
+  './assets/js/login-rescue.js',
   './assets/js/it-core.js',
   './assets/js/client-config.js',
   './assets/js/cloud-autoconfig.js',

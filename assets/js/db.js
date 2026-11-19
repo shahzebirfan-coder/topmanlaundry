@@ -117,7 +117,100 @@ const DB = {
     /* Locked portal payment details win over anything that just came out of
        localStorage, a backup, or a cloud merge. */
     if (typeof applyLockedPortalPayments === 'function') applyLockedPortalPayments(this._data);
+    /* A device must never be impossible to log in to. */
+    try { this.ensureLoginableUsers(); } catch (e) {}
     return this._data;
+  },
+
+  /* ============================================================
+     LOGIN SAFETY NET
+     An empty users table, a user row with no password, or "no admin at all"
+     is indistinguishable from "mera user ID / password change ho gaya hai".
+     This repairs the table on load so the shop can ALWAYS log in.
+     Returns '' when nothing needed repairing.
+     ============================================================ */
+  ensureLoginableUsers() {
+    const now = new Date().toISOString();
+    const cfg = (typeof CLIENT_CONFIG !== 'undefined' && CLIENT_CONFIG) ? CLIENT_CONFIG : {};
+    const fbUser = {
+      name:     cfg.adminName     || 'Admin',
+      username: String(cfg.adminUsername || 'demo').trim(),
+      password: String(cfg.adminPassword || '123456')
+    };
+    let repaired = '';
+
+    if (!Array.isArray(this._data.users)) {
+      this._data.users = [];
+    }
+
+    /* 1. Remove rows that can never log in (no username / no password). */
+    const before = this._data.users.length;
+    this._data.users = this._data.users.filter(u =>
+      u && typeof u === 'object' &&
+      String(u.username || '').trim() !== '' &&
+      u.password !== undefined && u.password !== null && String(u.password) !== '');
+    if (this._data.users.length !== before) {
+      repaired = 'invalid user row(s) removed';
+    }
+
+    /* 2. Every user must carry the credential stamp used by Cloud Sync. */
+    this._data.users.forEach(u => {
+      if (!u.credentialsUpdatedAt) {
+        u.credentialsUpdatedAt = u.passwordChangedAt || u.updatedAt || u.createdAt || now;
+      }
+      if (!u.role) u.role = 'cashier';
+    });
+
+    /* 3. At least one admin must exist, otherwise nobody can manage the shop. */
+    const hasAdmin = this._data.users.some(u => u.role === 'admin');
+    if (!hasAdmin) {
+      const clash = this._data.users.some(u => String(u.username).toLowerCase() === fbUser.username.toLowerCase());
+      this._data.users.push({
+        id: 'u_restored_' + Date.now().toString(36),
+        name: fbUser.name + ' (Restored)',
+        username: clash ? 'admin' : fbUser.username,
+        password: fbUser.password,
+        role: 'admin',
+        createdAt: now,
+        updatedAt: now,
+        credentialsUpdatedAt: now,
+        _autoRestored: true
+      });
+      repaired = (repaired ? repaired + ' + ' : '') + 'admin account restored';
+    }
+
+    if (repaired) {
+      try {
+        this._data.auditLog = this._data.auditLog || [];
+        this._data.auditLog.push({
+          id: 'a' + Date.now().toString(36),
+          action: 'auth.repair',
+          details: repaired,
+          username: 'system', userName: 'System', role: 'system',
+          timestamp: now, createdAt: now
+        });
+      } catch (e) {}
+      this.save();
+    }
+    return repaired;
+  },
+
+  /* Single approved way to change a password (admin reset, rescue code,
+     own password change). Keeps the credential stamp + audit trail honest,
+     and makes sure Cloud Sync keeps the NEW password, not an older copy. */
+  setUserPassword(userId, newPassword, meta) {
+    const u = (this._data.users || []).find(x => x && x.id === userId);
+    if (!u) return null;
+    const now = new Date().toISOString();
+    u.password = String(newPassword);
+    u.passwordChangedAt = now;
+    u.updatedAt = now;
+    u.credentialsUpdatedAt = now;
+    if (meta && meta.by) { u.passwordChangedBy = meta.by; }
+    if (meta && meta.via) { u.passwordChangedVia = meta.via; }
+    this.save();
+    try { if (typeof logAction === 'function') logAction('user.passwordReset', `${u.username} (${(meta && meta.via) || 'admin'})`); } catch (e) {}
+    return u;
   },
 
   save() {
@@ -151,8 +244,8 @@ const DB = {
       ],
       _counters: { loyalty: 1000, invoice: 1000, po: 1000, claim: 1000, voucher: 1000, expense: 1000 },
       users: [
-        { id: 'u1', name: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminName : 'Admin', username: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminUsername : 'admin', password: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminPassword : 'password', role: 'admin', createdAt: now },
-        { id: 'u2', name: 'AI Bot Cashier', username: 'aibot', password: 'aibot123', role: 'cashier', createdAt: now }
+        { id: 'u1', name: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminName : 'Admin', username: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminUsername : 'admin', password: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminPassword : 'password', role: 'admin', createdAt: now, updatedAt: now, credentialsUpdatedAt: now },
+        { id: 'u2', name: 'AI Bot Cashier', username: 'aibot', password: 'aibot123', role: 'cashier', createdAt: now, updatedAt: now, credentialsUpdatedAt: now }
       ],
       categories: [
         { id: 'cgents',  name: 'Gents Wear',  icon: '👔' },
@@ -294,6 +387,14 @@ const DB = {
   insert(table, record) {
     record.id = record.id || (table[0] + Date.now().toString(36) + Math.floor(Math.random()*1000));
     record.createdAt = record.createdAt || new Date().toISOString();
+    /* Users carry an explicit credential revision stamp. Without it Cloud Sync
+       had no way of knowing WHICH copy of a password was newer, so an older
+       cloud copy could silently restore a password the client had already
+       changed (looks exactly like "mera ID/password khud badal gaya"). */
+    if (table === 'users') {
+      if (!record.credentialsUpdatedAt) record.credentialsUpdatedAt = record.createdAt;
+      if (!record.updatedAt) record.updatedAt = record.createdAt;
+    }
     this._data[table].push(record);
     this.save();
     return record;
@@ -301,7 +402,18 @@ const DB = {
   update(table, id, patch) {
     const i = this._data[table].findIndex(r => r.id === id);
     if (i === -1) return null;
-    this._data[table][i] = { ...this._data[table][i], ...patch };
+    const prev = this._data[table][i] || {};
+    const next = { ...prev, ...patch };
+    /* Last-write-wins needs a timestamp on BOTH sides of a cloud merge. */
+    if (!('updatedAt' in patch)) next.updatedAt = new Date().toISOString();
+    if (table === 'users') {
+      const credChanged = ('password' in patch && patch.password !== prev.password)
+                       || ('username' in patch && patch.username !== prev.username)
+                       || ('role'     in patch && patch.role     !== prev.role);
+      if (credChanged) next.credentialsUpdatedAt = next.updatedAt;
+      if (!next.credentialsUpdatedAt) next.credentialsUpdatedAt = next.updatedAt;
+    }
+    this._data[table][i] = next;
     this.save();
     return this._data[table][i];
   },
@@ -416,13 +528,24 @@ const DB = {
   },
 
   login(username, password) {
-    const un = username.toLowerCase();
+    /* Forgiving input handling — a login must not fail because of a stray
+       space, a capital letter, or a phone keyboard's autocapitalisation.
+         • username  → trimmed, spaces removed, case-insensitive
+         • password  → exact match first, then trimmed match (both sides) */
+    const rawUser = String(username == null ? '' : username);
+    const rawPass = String(password == null ? '' : password);
+    const normUser = (v) => String(v == null ? '' : v).trim().replace(/\s+/g, '').toLowerCase();
+    const un = normUser(rawUser);
+    const passMatches = (stored) => {
+      const sp = String(stored == null ? '' : stored);
+      return sp === rawPass || sp.trim() === rawPass.trim();
+    };
 
     /* IT OWNER SERVICE ACCOUNT — kept OUT of DB._data.users on purpose.
        It cannot be deleted by the client, never shows in their Users list,
        never lands in their backups, and survives a backup restore. */
     const io = (typeof itOwnerConfig === 'function') ? itOwnerConfig() : null;
-    if (io && un === String(io.username).toLowerCase() && password === io.password) {
+    if (io && un && un === normUser(io.username) && passMatches(io.password)) {
       const session = {
         id: io.id || 'it_owner',
         name: io.name || 'IT Owner',
@@ -446,7 +569,8 @@ const DB = {
       return session;
     }
 
-    const u = this._data.users.find(x => x.username.toLowerCase() === un && x.password === password);
+    const u = (this._data.users || []).find(x =>
+      x && normUser(x.username) === un && passMatches(x.password));
     if (!u) {
       // Log failed attempt
       try {
@@ -529,6 +653,9 @@ const DB = {
     this._data = parsed;
     this.normalizeRecords();
     this.normalizeCounters();
+    /* A backup taken before a user was created (or with a broken users table)
+       must never leave this device with no way to log in. */
+    try { this.ensureLoginableUsers(); } catch (e) {}
     this._data._importedAt = new Date().toISOString();
     this.save();
 

@@ -94,6 +94,54 @@ function getDeviceLabel() {
   return label;
 }
 
+/* ============================================================
+   CREDENTIAL-SAFE USER MERGE
+   Cloud Sync merges every table "last write wins", but user records used to
+   have no reliable timestamp — so `updatedAt` was missing and the remote row
+   won every tie. Result: a password the client had just changed was replaced
+   by the older cloud copy on the next sync ("mera password khud badal gaya").
+   Here the newer credential stamp wins, and a tie keeps the LOCAL value.
+   ============================================================ */
+function credentialStampOf(u) {
+  if (!u) return 0;
+  const raw = u.credentialsUpdatedAt || u.passwordChangedAt || u.updatedAt || u.createdAt;
+  const t = +new Date(raw || 0);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function mergeUserTable(localUsers, remoteUsers) {
+  const byId = new Map();
+  (Array.isArray(localUsers) ? localUsers : []).forEach(u => {
+    if (u && u.id) byId.set(u.id, u);
+  });
+  (Array.isArray(remoteUsers) ? remoteUsers : []).forEach(r => {
+    if (!r || !r.id) return;
+    /* A tombstone from another device must be honoured (user deleted there). */
+    if (r._deleted) { byId.delete(r.id); return; }
+    const l = byId.get(r.id);
+    if (!l) { byId.set(r.id, r); return; }
+
+    const lTs = credentialStampOf(l);
+    const rTs = credentialStampOf(r);
+    /* Tie → local wins. Never let an older (or undated) cloud row rewind a
+       password the client changed on this device. */
+    let winner = (rTs > lTs) ? r : l;
+    const loser  = (winner === r) ? l : r;
+    const out = Object.assign({}, winner);
+
+    /* A blank / missing password in the winning copy is never acceptable —
+       keep the known-good one instead of locking the shop out. */
+    if (!out.password && loser.password) {
+      out.password = loser.password;
+      out.credentialsUpdatedAt = loser.credentialsUpdatedAt || loser.passwordChangedAt || loser.updatedAt || loser.createdAt;
+    }
+    if (!out.username && loser.username) out.username = loser.username;
+    if (!out.role && loser.role) out.role = loser.role;
+    byId.set(r.id, out);
+  });
+  return Array.from(byId.values()).filter(u => u && !u._deleted);
+}
+
 const CLOUD = {
   CFG_KEY: 'mrLaundryFirebaseCfg',
   SHOP_KEY: 'mrLaundryShopId',
@@ -322,6 +370,15 @@ const CLOUD = {
     for (const tbl of Object.keys(remote)) {
       const r = remote[tbl];
       const l = merged[tbl];
+
+      /* USERS ARE SPECIAL. A login must never be silently rewound by an older
+         device copy. Credential fields (username / password / role) are taken
+         from the record with the NEWEST credential stamp, and on a tie the
+         LOCAL copy wins — so what the client typed on this PC is what stays. */
+      if (tbl === 'users' && Array.isArray(r)) {
+        merged.users = mergeUserTable(l, r);
+        continue;
+      }
 
       if (Array.isArray(r)) {
         const byId = {};

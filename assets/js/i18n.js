@@ -119,7 +119,7 @@ const TRANSLATIONS = {
   'login.username':      { en: 'Username',        ur: 'یوزر نیم',                    rmn: 'Username' },
   'login.password':      { en: 'Password',        ur: 'پاس ورڈ',                     rmn: 'Password' },
   'login.invalid':       { en: 'Invalid username or password', ur: 'یوزر نیم یا پاس ورڈ غلط ہے', rmn: 'Galat username ya password' },
-  'login.forgot':        { en: 'Forgot Password?',          ur: 'پاس ورڈ بھول گئے؟',          rmn: 'Password Bhool Gaye?' },
+  'login.forgot':        { en: 'Forgot Password / Login Help?', ur: 'پاس ورڈ بھول گئے؟',       rmn: 'Password bhool gaye? / Login help' },
   'login.welcome':       { en: 'Welcome to',                ur: 'خوش آمدید',                   rmn: 'Khush Aamdeed' },
   'login.portal':        { en: 'Portal',                    ur: 'پورٹل',                       rmn: 'Portal' },
   'login.subcopy':       { en: 'Manage your orders, track your laundry, and stay connected — all in one place.', ur: 'اپنے آرڈرز سنبھالیں، لانڈری ٹریک کریں اور جڑے رہیں — سب ایک جگہ۔', rmn: 'Apne orders sambhalen, laundry track karein aur juray rahein — sab ek jagah.' },

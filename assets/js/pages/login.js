@@ -204,9 +204,15 @@ function renderLogin() {
             <span>${t('login.signin', 'Sign In')}</span>
           </button>
 
+          <div style="text-align:center;font-size:11.5px;color:var(--text-soft);margin-top:-2px;margin-bottom:6px;line-height:1.6;">
+            User ID bhool gaye? <a href="#" id="lgUserIds" style="color:var(--primary);font-weight:700;">Yahan dekhein</a>
+            <span style="opacity:.6;">•</span>
+            Password nahi? <a href="#" id="lgRescue" style="color:var(--primary);font-weight:700;">Rescue code</a>
+          </div>
+
           <button type="button" id="forgotBtn" class="lg-forgot">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4.6" y="10.5" width="14.8" height="9.6" rx="2.2"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>
-            <span>${t('login.forgot', 'Forgot Password?')}</span>
+            <span>${t('login.forgot', 'Forgot Password / Login Help?')}</span>
           </button>
 
           ${cloudEnabled ? `
@@ -269,6 +275,20 @@ function renderLogin() {
   }
 
   $('#forgotBtn').onclick = () => { if (typeof openForgotPassword === 'function') openForgotPassword(); };
+
+  /* Direct shortcuts — the two things a locked-out shop actually needs. */
+  const userIdsLink = $('#lgUserIds');
+  if (userIdsLink) userIdsLink.onclick = (e) => {
+    e.preventDefault();
+    if (typeof openShowUserIds === 'function') openShowUserIds();
+    else if (typeof openForgotPassword === 'function') openForgotPassword();
+  };
+  const rescueLink = $('#lgRescue');
+  if (rescueLink) rescueLink.onclick = (e) => {
+    e.preventDefault();
+    if (typeof openRescueReset === 'function') openRescueReset();
+    else if (typeof openForgotPassword === 'function') openForgotPassword();
+  };
 
   if ($('#loginSyncBtn')) {
     $('#loginSyncBtn').onclick = async (e) => {

@@ -118,8 +118,12 @@ function openUserForm(existing) {
       const password = $('#uPass', m).value;
       const role = $('#uRole', m).value;
       if (!name || !username || (!existing && !password)) { toast('All fields required','error'); return; }
-      const dup = DB.all('users').find(x => x.username === username && x.id !== (existing?existing.id:null));
-      if (dup) { toast('Username already exists','error'); return; }
+      /* Case/space-insensitive duplicate check — "Admin" and "admin " are the
+         same login, so allowing both only creates confusing duplicate IDs. */
+      const normU = v => String(v || '').trim().replace(/\s+/g, '').toLowerCase();
+      const dup = DB.all('users').find(x => normU(x.username) === normU(username) && x.id !== (existing ? existing.id : null));
+      if (dup) { toast('Ye username pehle se maujood hai (case ka farq nahi padta)','error'); return; }
+      if (normU(username).length < 3) { toast('Username kam az kam 3 characters ka rakhein','error'); return; }
       const data = { name, username, role };
       if (password) data.password = password;
       // Security question
@@ -137,8 +141,20 @@ function openUserForm(existing) {
       }
       if (existing) DB.update('users', existing.id, data);
       else DB.insert('users', { ...data, password });
-      closeModal(); toast('Saved','success'); renderUsersBody();
+      closeModal(); renderUsersBody();
       if (typeof logAction === 'function') logAction(existing?'user.edit':'user.add', name);
+
+      /* Credentials change → make it obvious which ID/password is now valid,
+         otherwise the next person on this PC keeps typing the old ones. */
+      const credChanged = password || (existing && normU(existing.username) !== normU(username));
+      if (credChanged) {
+        const lines = ['✅ Login details update ho gaye:', '', 'User ID: ' + username];
+        if (password) lines.push('Password: ' + password);
+        lines.push('', 'Inhi details se login karein. Bhoolne se bachne ke liye likh lein.');
+        try { alert(lines.join('\n')); } catch (e) {}
+      } else {
+        toast('Saved','success');
+      }
     };
   }});
 }

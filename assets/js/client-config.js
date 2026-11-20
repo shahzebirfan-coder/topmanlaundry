@@ -11,9 +11,9 @@ const CLIENT_CONFIG = {
   tagline: "Quality Dry Cleaner Service", // Tagline
 
   // 2. Initial Admin Login (Pehli dafa login ke liye)
-  adminUsername: "demo",                // Default User ID
-  adminPassword: "123456",               // Default Password
-  adminName: "Demo User",                    // Display Name
+  adminUsername: "admin",                // Default User ID  (client ke chalte hue login se match)
+  adminPassword: "admin123456",          // Default Password (fresh install + lock-out recovery)
+  adminName: "Admin",                    // Display Name
 
   // 3. Trial & Subscription
   trialDays: 15,                         // Default trial days for new client

@@ -51,6 +51,61 @@ function fmtDateShort(iso) {
 }
 function isoDay(d=new Date()) { return d.toISOString().slice(0,10); }
 
+/* ============================================================
+   PAYMENT / DELIVERY DATE STAMPS  (Orders page columns)
+   ------------------------------------------------------------
+   Client mahino baad orders collect karta hai, is liye har order par
+   do dates chahiye:
+     • Payment Received — paisa ACTUALLY kab mila
+     • Delivered On     — maal ACTUALLY kab diya gaya
+
+   Naye orders par ye stamps likhe jate hain (POS, status change,
+   Receive Payment, Partial Delivery, Edit Invoice).
+   Purane orders ke liye:
+     • payment  → paymentsLog ka aakhri entry, warna createdAt (paid tha)
+     • delivery → deliveredAt, warna (agar status delivered) deliveryDate
+                  jo promised date hai, is liye `estimated:true` mark hoti hai
+   ============================================================ */
+
+/* '' ya ISO string — kab paisa mila (aakhri payment) */
+function orderPaymentAt(o) {
+  if (!o || typeof o !== 'object') return '';
+  const log = (Array.isArray(o.paymentsLog) ? o.paymentsLog : [])
+    .filter(p => p && p.at && +new Date(p.at) > 0);
+  if (log.length) {
+    let last = log[0];
+    log.forEach(p => { if (+new Date(p.at) >= +new Date(last.at)) last = p; });
+    return last.at;
+  }
+  if (o.paymentReceivedAt) return o.paymentReceivedAt;
+  if (o.paidAt) return o.paidAt;
+  /* paid at booking (POS) — createdAt hi payment ka waqt hai */
+  if (Number(o.paid) > 0) return o.createdAt || '';
+  return '';
+}
+
+/* { iso, estimated } — kab deliver hua. estimated=true ka matlab exact
+   record nahi tha aur promised delivery date se liya gaya hai. */
+function orderDeliveredOn(o) {
+  if (!o || typeof o !== 'object') return { iso: '', estimated: false };
+  if (o.deliveredAt) return { iso: o.deliveredAt, estimated: !!o.deliveredAtEstimated };
+  if (o.status !== 'delivered') return { iso: '', estimated: false };
+  if (o.deliveryDate) {
+    /* Promised date ko us din ke dopahar par rakhein (timezone surprises se bachne ke liye) */
+    const d = new Date(String(o.deliveryDate) + 'T12:00:00');
+    if (!isNaN(d.getTime())) return { iso: d.toISOString(), estimated: true };
+  }
+  return { iso: o.updatedAt || o.createdAt || '', estimated: true };
+}
+
+/* Chhota date + time tooltip ke liye. */
+function fmtDateTimeShort(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
 function getGreeting() {
   const h = new Date().getHours();
   const useT = (typeof t === 'function');

@@ -240,6 +240,8 @@ const TRANSLATIONS = {
   'ord.status':          { en: 'Status',                           ur: 'حالت',                        rmn: 'Status' },
   'ord.booked':          { en: 'Booked',                           ur: 'بکنگ',                       rmn: 'Booking' },
   'ord.delivery':        { en: 'Delivery',                         ur: 'ڈیلیوری',                    rmn: 'Delivery' },
+  'ord.payDate':         { en: 'Payment Received',                 ur: 'ادائیگی کی تاریخ',            rmn: 'Payment Date' },
+  'ord.deliveredOn':     { en: 'Delivered On',                     ur: 'ڈیلیور ہوا',                  rmn: 'Delivered On' },
   'ord.actions':         { en: 'Actions',                          ur: 'عمل',                         rmn: 'Actions' },
   'ord.viewInv':         { en: 'View Invoice',                     ur: 'انوائس دیکھیں',              rmn: 'Invoice Dekhein' },
   'ord.updateStatus':    { en: 'Update Status',                    ur: 'حالت تبدیل کریں',            rmn: 'Status Update' },

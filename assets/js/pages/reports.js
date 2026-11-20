@@ -187,7 +187,7 @@ function renderReportBody() {
 /* ===================== EXPORTS ===================== */
 function exportReportCSV() {
   const orders = rangeOrders();
-  const rows = [['OrderID','Date','Customer','Items','Subtotal','Discount','Tax','PickUpDeliveryCharges','Total','Paid','Due','Status','PaymentMethod']];
+  const rows = [['OrderID','Date','Customer','Items','Subtotal','Discount','Tax','PickUpDeliveryCharges','Total','Paid','Due','Status','PaymentMethod','PaymentReceivedDate','DeliveredOn']];
   orders.forEach(o => {
     const c = DB.get('customers', o.customerId) || { name:'' };
     rows.push([
@@ -196,7 +196,11 @@ function exportReportCSV() {
       (o.items||[]).map(i => `${i.qty}x ${i.name}`).join(' | '),
       o.subtotal, o.discount, o.tax,
       (typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0)),
-      o.total, o.paid, o.due, o.status, o.paymentMethod||''
+      o.total, o.paid, o.due, o.status, o.paymentMethod||'',
+      (typeof orderPaymentAt === 'function' ? String(orderPaymentAt(o)||'').slice(0,10) : ''),
+      (typeof orderDeliveredOn === 'function'
+        ? (function(){ const d = orderDeliveredOn(o); return d.iso ? (d.iso.slice(0,10) + (d.estimated ? ' (approx)' : '')) : ''; })()
+        : '')
     ]);
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');

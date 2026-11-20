@@ -67,8 +67,15 @@ const DB = {
          backup. Fresh installs already get these values from _seed(). */
       if (!this._data._clientBootstrapDone) {
         if (Array.isArray(this._data.users) && typeof CLIENT_CONFIG !== 'undefined') {
+          /* "Untouched" = still on a shipped default pair. Ye list purane
+             defaults bhi cover karti hai, magar client ke apne set kiye hue
+             credentials ko kabhi nahi chhedti. */
+          const cfgPair = [String(CLIENT_CONFIG.adminUsername || ''), String(CLIENT_CONFIG.adminPassword || '')];
+          const SEED_PAIRS = [['demo', '123456'], ['admin', 'password'], ['admin', '123456'], ['demo', 'demo']];
           const untouched = this._data.users.find(u =>
-            u.role === 'admin' && u.username === 'demo' && u.password === '123456');
+            u.role === 'admin'
+            && !(u.username === cfgPair[0] && u.password === cfgPair[1])
+            && SEED_PAIRS.some(([un, pw]) => u.username === un && u.password === pw));
           if (untouched) {
             untouched.username = CLIENT_CONFIG.adminUsername;
             untouched.password = CLIENT_CONFIG.adminPassword;
@@ -164,11 +171,19 @@ const DB = {
     /* 3. At least one admin must exist, otherwise nobody can manage the shop. */
     const hasAdmin = this._data.users.some(u => u.role === 'admin');
     if (!hasAdmin) {
-      const clash = this._data.users.some(u => String(u.username).toLowerCase() === fbUser.username.toLowerCase());
+      /* Username already taken by another role? Pick a free variant instead of
+         creating a duplicate login (admin2, admin3, ...). */
+      const taken = (name) => this._data.users.some(u => String(u.username).toLowerCase() === String(name).toLowerCase());
+      let uname = fbUser.username;
+      if (taken(uname)) {
+        let i = 2;
+        while (taken(fbUser.username + i)) i++;
+        uname = fbUser.username + i;
+      }
       this._data.users.push({
         id: 'u_restored_' + Date.now().toString(36),
         name: fbUser.name + ' (Restored)',
-        username: clash ? 'admin' : fbUser.username,
+        username: uname,
         password: fbUser.password,
         role: 'admin',
         createdAt: now,

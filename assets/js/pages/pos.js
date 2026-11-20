@@ -937,6 +937,20 @@ function openPaymentDialog(orderMeta) {
         cashierName: DB.currentUser().name,
         branchId: (typeof getActiveBranchId === 'function') ? getActiveBranchId() : 'main'
       };
+
+      /* ACTUAL date stamps (Orders page ke naye columns ke liye).
+         • paisa abhi mila      → paymentReceivedAt
+         • poori payment        → fullyPaidAt
+         • seedha delivered     → deliveredAt */
+      order.createdAt = order.createdAt || new Date().toISOString();
+      if (actualPaid > 0) order.paymentReceivedAt = order.createdAt;
+      if (due === 0 && actualPaid > 0) order.fullyPaidAt = order.createdAt;
+      if (order.status === 'delivered') {
+        order.deliveredAt = order.createdAt;
+        order.deliveredAtEstimated = false;
+        order.deliveredBy = DB.currentUser()?.username || 'unknown';
+      }
+
       const saved = DB.insert('orders', order);
       // Auto-deduct hangers & shoppers from inventory
       if (typeof autoDeductInventory === 'function') {

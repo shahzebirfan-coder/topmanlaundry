@@ -221,6 +221,8 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       <table style="font-size:${fontSize+1}px;width:100%;border-collapse:collapse;margin-bottom:12px;line-height:1.5;">
         <tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Booking Date</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;">${fmtDate(o.createdAt)}</td></tr>
         ${o.deliveryDate? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Delivery Date</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;color:#000;"><b>${escapeHtml(o.deliveryDate)}</b></td></tr>`:''}
+        ${(typeof orderDeliveredOn === 'function' && orderDeliveredOn(o).iso)
+          ? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Delivered On</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;color:#000;"><b>${(orderDeliveredOn(o).estimated?'~ ':'')+fmtDateShort(orderDeliveredOn(o).iso)}</b></td></tr>` : ''}
         ${showCashier ? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Cashier</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;">${escapeHtml(cashier.name)}</td></tr>`:''}
         <tr><td style="padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:bold;">Customer</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+3}px;"><b>${escapeHtml(c.name)}</b></td></tr>
         ${c.phone? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:bold;">Phone</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+3}px;"><b>${escapeHtml(c.phone)}</b></td></tr>`:''}
@@ -287,6 +289,8 @@ function buildOfficeSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       <table style="font-size:${fontSize+1}px;width:100%;border-collapse:collapse;border:2px solid #000;margin-bottom:14px;background:#fff;line-height:1.5;">
         <tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Booked:</td><td style="border:1px solid #000;padding:6px 8px;">${fmtDateShort(o.createdAt)}</td></tr>
         ${o.deliveryDate? `<tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Delivery:</td><td style="border:1px solid #000;padding:6px 8px;color:#000;"><b>${escapeHtml(o.deliveryDate)}</b></td></tr>`:''}
+        ${(typeof orderDeliveredOn === 'function' && orderDeliveredOn(o).iso)
+          ? `<tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Delivered On:</td><td style="border:1px solid #000;padding:6px 8px;color:#000;"><b>${(orderDeliveredOn(o).estimated?'~ ':'')+fmtDateShort(orderDeliveredOn(o).iso)}</b></td></tr>` : ''}
         <tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Customer:</td><td style="border:1px solid #000;padding:6px 8px;font-size:${fontSize+3}px;"><b>${escapeHtml(c.name)}</b></td></tr>
         ${c.phone? `<tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Phone:</td><td style="border:1px solid #000;padding:6px 8px;font-size:${fontSize+2}px;"><b>${escapeHtml(c.phone)}</b></td></tr>`:''}
         <tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">By:</td><td style="border:1px solid #000;padding:6px 8px;">${escapeHtml(cashier.name)}</td></tr>

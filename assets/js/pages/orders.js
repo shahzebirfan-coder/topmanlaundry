@@ -41,11 +41,14 @@ function renderOrders() {
 
     <div id="ordersSummary"></div>
 
-    <div class="card" style="padding:0;overflow:hidden;">
+    <div class="card" style="padding:0;overflow-x:auto;">
       <table class="tbl">
         <thead><tr>
           <th>${t('ord.invoice')}</th><th>${t('ord.customer')}</th><th>${t('ord.items')}</th><th>${t('ord.total')}</th><th>${t('ord.paid')}</th>
-          <th>${t('ord.status')}</th><th>${t('ord.booked')}</th><th>${t('ord.delivery')}</th><th>${t('ord.actions')}</th>
+          <th title="Paisa actually kab mila">💵 ${t('ord.payDate')}</th>
+          <th>${t('ord.status')}</th><th>${t('ord.booked')}</th><th>${t('ord.delivery')}</th>
+          <th title="Order customer ko actually kab diya gaya">✅ ${t('ord.deliveredOn')}</th>
+          <th>${t('ord.actions')}</th>
         </tr></thead>
         <tbody id="ordersBody"></tbody>
       </table>
@@ -95,6 +98,35 @@ function filteredOrders() {
   });
 }
 
+/* ===== PAYMENT DATE & DELIVERED ON cells (Orders table) =====
+   Client orders kafi mahino baad collect karta hai — is liye dono ACTUAL
+   dates list me nazar aani chahiye. Hover karne par poora waqt bhi dikhta hai.
+   `~` = exact record nahi tha, promised delivery date se estimate (purane orders). */
+function payDateCell(o) {
+  const iso = orderPaymentAt(o);
+  if (!iso) return '<span style="color:var(--text-soft);">—</span>';
+  const full = fmtDateTimeShort(iso) || fmtDateShort(iso);
+  const part = Number(o.due) > 0
+    ? ' <span class="badge due" style="font-size:10px;" title="Poora payment nahi hua — ye date aakhri payment ki hai">part</span>'
+    : '';
+  return `<span title="${escapeHtml(full)}" style="font-size:12.5px;font-weight:700;">${fmtDateShort(iso)}</span>${part}`;
+}
+
+function deliveredCell(o) {
+  const d = orderDeliveredOn(o);
+  if (!d.iso) {
+    return o.status === 'delivered'
+      ? '<span style="color:var(--text-soft);">—</span>'
+      : '<span style="color:var(--text-soft);font-size:11.5px;">not delivered</span>';
+  }
+  const full = fmtDateTimeShort(d.iso) || fmtDateShort(d.iso);
+  const estTitle = d.estimated
+    ? ' title="Purana order — actual delivery date record nahi tha, is liye promised delivery date dikhayi gayi hai"'
+    : ` title="${escapeHtml(full)}"`;
+  const est = d.estimated ? '<span style="color:#b45309;font-weight:900;">~</span>' : '';
+  return `<span${estTitle} style="font-size:12.5px;font-weight:700;${d.estimated ? 'color:#b45309;' : ''}">${est}${fmtDateShort(d.iso)}</span>`;
+}
+
 function renderOrdersBody() {
   const filtered = filteredOrders();
 
@@ -112,7 +144,7 @@ function renderOrdersBody() {
   `;
 
   if (!filtered.length) {
-    $('#ordersBody').innerHTML = `<tr><td colspan="9"><div class="empty"><div class="emoji">📦</div><h4>${t('ord.noOrders')}</h4><p>${t('ord.tryClearing')}</p></div></td></tr>`;
+    $('#ordersBody').innerHTML = `<tr><td colspan="11"><div class="empty"><div class="emoji">📦</div><h4>${t('ord.noOrders')}</h4><p>${t('ord.tryClearing')}</p></div></td></tr>`;
     return;
   }
 
@@ -125,12 +157,14 @@ function renderOrdersBody() {
       <td>${o.items.length} items<br><b style='color:var(--primary);'>${o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType==='hanger'?'Hanger':o.deliveryType==='fold'?'Fold':'Hanger / Fold'}</span>`:''}</td>
       <td><b>${fmtMoney(o.total)}</b></td>
       <td>${fmtMoney(o.paid)} ${o.due>0?`<br><span class="badge due">Due ${fmtMoney(o.due)}</span>`:`<br><span class="badge paid">Paid</span>`}</td>
+      <td style="white-space:nowrap;">${payDateCell(o)}</td>
       <td>
         <span class="badge ${o.status}">${o.status}</span>
         ${(o.status === 'ready' && o.location) ? `<br><span style="font-size:10px;font-weight:700;color:#000;background:#fef08a;padding:2px 6px;border-radius:6px;border:1px solid #f59e0b;margin-top:4px;display:inline-block;">📍 ${escapeHtml(o.location)}</span>` : ''}
       </td>
       <td>${fmtDateShort(o.createdAt)}</td>
       <td>${escapeHtml(o.deliveryDate || '-')}</td>
+      <td style="white-space:nowrap;">${deliveredCell(o)}</td>
       <td>
         <button class="btn btn-secondary btn-sm" data-act="view" data-id="${o.id}" title="${t('ord.viewInv')}">👁️</button>
         <button class="btn btn-secondary btn-sm" data-act="status" data-id="${o.id}" title="${t('ord.updateStatus')}">🔄</button>
@@ -266,10 +300,20 @@ function openStatusChange(orderId) {
       const rawAmt = payOn ? (parseFloat(addPayInp.value) || 0) : 0;
       const addPay = Math.max(0, Math.min(Math.max(0, fresh.due || 0), rawAmt));
 
+      const nowIso = new Date().toISOString();
+
       /* Default path: ONLY status (and rack when Ready). paid / due /
          paymentsLog are deliberately NOT touched. */
       const patch = { status: newStatus };
       if (newStatus === 'ready') patch.location = $('#newRack', m).value.trim();
+
+      /* DELIVERED ON — pehli dafa "Delivered" hote waqt actual date stamp
+         karein (Orders page ka column isi se bharta hai). */
+      if (newStatus === 'delivered' && oldStatus !== 'delivered') {
+        patch.deliveredAt = nowIso;
+        patch.deliveredAtEstimated = false;
+        patch.deliveredBy = DB.currentUser()?.username || 'unknown';
+      }
 
       if (addPay > 0) {
         const msg = `${fmtMoney(addPay)} ki payment ABHI receive hui hai?\n\n` +
@@ -292,8 +336,10 @@ function openStatusChange(orderId) {
         Object.assign(patch, {
           paid, due, isCredit: due > 0,
           paymentMethod: method,
-          paymentsLog
+          paymentsLog,
+          paymentReceivedAt: nowIso
         });
+        if (due === 0) patch.fullyPaidAt = nowIso;
         if (typeof logAction === 'function') {
           logAction('payment.receive', `INV-${fresh.invoiceNo||orderId.slice(-6)}: ${fmtMoney(addPay)} via ${method} (status update)`);
         }
@@ -382,7 +428,7 @@ function openEditInvoice(orderId) {
     </div>
     <div class="form-row">
       <div class="field">
-        <label>Delivery Date</label>
+        <label>Delivery Date <span style="font-weight:normal;color:var(--text-soft);">(promised)</span></label>
         <input type="date" id="eDelivery" value="${o.deliveryDate||''}"/>
       </div>
       <div class="field">
@@ -390,6 +436,21 @@ function openEditInvoice(orderId) {
         <select id="ePayMethod">
           ${['cash','card','bank','online','credit'].map(p=>`<option value="${p}" ${o.paymentMethod===p?'selected':''}>${p}</option>`).join('')}
         </select>
+      </div>
+    </div>
+
+    <!-- ACTUAL dates (Orders page ke naye columns). Purane orders ki date
+         yahan se theek ki ja sakti hai. -->
+    <div class="form-row">
+      <div class="field">
+        <label>💵 Payment Received On <span style="font-weight:normal;color:var(--text-soft);">(actual)</span></label>
+        <input type="date" id="ePayDate" value="${(function(){const d=orderPaymentAt(o);return d?String(d).slice(0,10):'';})()}"/>
+        <small style="color:var(--text-soft);">Khali chhoren to paymentsLog / booking date se li jayegi.</small>
+      </div>
+      <div class="field">
+        <label>✅ Delivered On <span style="font-weight:normal;color:var(--text-soft);">(actual)</span></label>
+        <input type="date" id="eDeliveredOn" value="${(function(){const d=orderDeliveredOn(o);return (d.iso && !d.estimated)?String(d.iso).slice(0,10):(o.deliveryDate||'');})()}"/>
+        <small style="color:var(--text-soft);">Status Delivered par set karein. Khali = record nahi.</small>
       </div>
     </div>
 
@@ -481,17 +542,40 @@ function openEditInvoice(orderId) {
       const editLog = o.editLog || [];
       editLog.push({ by: DB.currentUser().username, at: new Date().toISOString() });
 
+      /* ACTUAL payment / delivery dates — admin yahan se theek kar sakta hai.
+         Time preserve karte hain agar date wohi hai, warna us din 12:00 baje. */
+      const _dateStamp = (inpId, existingIso) => {
+        const el = $(inpId, m);
+        const v = el ? String(el.value || '').trim() : '';
+        if (!v) return '';
+        if (existingIso && String(existingIso).slice(0, 10) === v) return existingIso;
+        const d = new Date(v + 'T12:00:00');
+        return isNaN(d.getTime()) ? '' : d.toISOString();
+      };
+      const newPayDate = _dateStamp('#ePayDate', orderPaymentAt(o));
+      const newDeliveredOn = _dateStamp('#eDeliveredOn', o.deliveredAt || '');
+      const newStatusVal = $('#eStatus', m).value;
+      const datesPatch = {};
+      if (newPayDate) datesPatch.paymentReceivedAt = newPayDate;
+      if (newDeliveredOn) {
+        datesPatch.deliveredAt = newDeliveredOn;
+        datesPatch.deliveredAtEstimated = false;
+      } else if (newStatusVal === 'delivered' && !o.deliveredAt) {
+        datesPatch.deliveredAt = new Date().toISOString();
+        datesPatch.deliveredAtEstimated = false;
+      }
+
       if (typeof logAction === 'function') logAction('order.edit', `INV-${o.invoiceNo||orderId.slice(-6)}: items changed`);
       const _oldStatus = o.status;
-      DB.update('orders', orderId, {
+      DB.update('orders', orderId, Object.assign({
         items, subtotal, discountType: discType, discountValue: discVal,
         discount: disc, manualDiscount: disc, loyaltyDiscount: 0, loyaltyPercent: 0,
         tax, pickupDeliveryCharges: charges, total, paid, due, isCredit: due > 0,
-        status: $('#eStatus', m).value,
+        status: newStatusVal,
         deliveryDate: $('#eDelivery', m).value,
         paymentMethod: $('#ePayMethod', m).value,
         editLog
-      });
+      }, datesPatch));
       closeModal(); toast('Invoice updated','success'); renderOrdersBody();
       const _newStatus = $('#eStatus', m).value;
       if (typeof maybePromptWhatsAppOnStatus === 'function' && _oldStatus !== _newStatus) {
@@ -614,14 +698,22 @@ function openReceivePayment(orderId) {
       };
       paymentsLog.push(payRecord);
 
-      DB.update('orders', orderId, {
+      const _patch = {
         paid: newPaid,
         due: newDue,
         isCredit: newDue > 0,
         paymentMethod: method, // latest method
         status: newStatus,
-        paymentsLog
-      });
+        paymentsLog,
+        paymentReceivedAt: payRecord.at      // ← Orders page: Payment Received date
+      };
+      if (newDue === 0) _patch.fullyPaidAt = payRecord.at;
+      if (newStatus === 'delivered' && oldStatus !== 'delivered') {
+        _patch.deliveredAt = payRecord.at;    // ← Orders page: Delivered On date
+        _patch.deliveredAtEstimated = false;
+        _patch.deliveredBy = DB.currentUser()?.username || 'unknown';
+      }
+      DB.update('orders', orderId, _patch);
 
       if (typeof logAction === 'function') {
         logAction('payment.receive', `${invNo}: ${fmtMoney(amt)} via ${method}${note?' ('+note+')':''}`);
@@ -883,7 +975,31 @@ function openPartialDelivery(orderId) {
       const addPay = Math.max(0, +$('#pdAddPay', m)?.value || 0);
       const paid = Math.min(o.total, o.paid + addPay);
       const due = o.total - paid;
-      return { status: newStatus, items, paid, due, isCredit: due > 0 };
+      const nowIso = new Date().toISOString();
+      const patch = { status: newStatus, items, paid, due, isCredit: due > 0 };
+
+      /* Payment mila to date + ledger entry; poora deliver hua to Delivered On. */
+      if (addPay > 0) {
+        const paymentsLog = Array.isArray(o.paymentsLog) ? [...o.paymentsLog] : [];
+        paymentsLog.push({
+          id: 'pay_' + Date.now().toString(36) + Math.floor(Math.random()*1000),
+          amount: addPay,
+          method: o.paymentMethod || 'cash',
+          note: 'Received with partial delivery',
+          by: DB.currentUser()?.username || 'unknown',
+          byName: DB.currentUser()?.name || '',
+          at: nowIso
+        });
+        patch.paymentsLog = paymentsLog;
+        patch.paymentReceivedAt = nowIso;
+      }
+      if (due === 0 && paid > 0) patch.fullyPaidAt = nowIso;
+      if (newStatus === 'delivered' && o.status !== 'delivered') {
+        patch.deliveredAt = nowIso;
+        patch.deliveredAtEstimated = false;
+        patch.deliveredBy = DB.currentUser()?.username || 'unknown';
+      }
+      return patch;
     };
 
     $('#pdSaveBtn', m).onclick = () => {

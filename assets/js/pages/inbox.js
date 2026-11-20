@@ -133,7 +133,11 @@ function renderPaymentsTab() {
       // Add p.amount to order's paid, reduce due
       const newPaid = Math.min(o.total, (o.paid||0) + p.amount);
       const newDue = o.total - newPaid;
-      DB.update('orders', p.orderId, { paid: newPaid, due: newDue, isCredit: newDue > 0 });
+      DB.update('orders', p.orderId, {
+        paid: newPaid, due: newDue, isCredit: newDue > 0,
+        paymentReceivedAt: new Date().toISOString(),   /* Orders page: Payment Received date */
+        ...(newDue === 0 ? { fullyPaidAt: new Date().toISOString() } : {})
+      });
       DB.update('paymentProofs', id, { status: 'verified', verifiedAt: new Date().toISOString(), verifiedBy: DB.currentUser().username });
       if (typeof logAction === 'function') logAction('payment.verify', `${fmtMoney(p.amount)} on INV-${o.invoiceNo||p.orderId.slice(-6)}`);
       toast(`✅ Payment verified! ${fmtMoney(p.amount)} added to ${o.invoiceNo?'INV-'+o.invoiceNo:p.orderId}`, 'success');

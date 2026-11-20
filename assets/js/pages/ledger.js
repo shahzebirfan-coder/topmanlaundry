@@ -284,13 +284,14 @@ function openCollectPayment(custId) {
           at: nowIso
         });
 
-        DB.update('orders', o.id, {
+        DB.update('orders', o.id, Object.assign({
           paid: newPaid,
           due: newDue,
           isCredit: newDue > 0,
           paymentMethod: method,
-          paymentsLog
-        });
+          paymentsLog,
+          paymentReceivedAt: nowIso          /* Orders page: Payment Received date */
+        }, newDue === 0 ? { fullyPaidAt: nowIso } : {}));
         remaining -= apply;
       });
 

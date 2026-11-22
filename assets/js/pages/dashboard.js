@@ -104,7 +104,10 @@ function renderDashboard() {
   }).join('') : `<tr><td colspan="6" class="empty"><div class="emoji">📦</div><h4>No orders yet</h4><p>Make your first sale to see it here.</p></td></tr>`;
 
   const content = `
-    <h1 class="page-title">📊 Dashboard — Today's Snapshot</h1>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h1 class="page-title" style="margin:0;">📊 Dashboard — Today's Snapshot</h1>
+      ${(typeof PRIV !== 'undefined') ? PRIV.masterBtn() : ''}
+    </div>
     ${(() => {
       const s = DB.settings();
       const u = DB.currentUser();
@@ -146,7 +149,9 @@ function renderDashboard() {
     })()}
 
     <!-- TODAY'S KEY METRICS - Clean 6-card layout -->
-    <div class="section-title">📅 Today's Performance</div>
+    <div class="priv-block" data-priv>
+    <div class="section-title">📅 Today's Performance ${(typeof PRIV !== 'undefined') ? PRIV.eyeBtn() : ''}</div>
+    <div class="priv-target">
 
     <!-- Row 1: Money flow -->
     <div class="dash-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:14px;">
@@ -207,6 +212,8 @@ function renderDashboard() {
         </div>
       </div>
     </div>
+    </div><!-- /priv-target -->
+    </div><!-- /priv-block (Today) -->
 
     ${(pending > 0 || ready > 0) ? `
       <div onclick="app.go('orders')" style="background:linear-gradient(135deg,#e0e7ff,#eff6ff);border:1px solid #c7d2fe;border-radius:12px;padding:12px 18px;margin-bottom:14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;transition:transform .2s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
@@ -253,7 +260,9 @@ function renderDashboard() {
     ` : ''}
 
     <!-- THIS MONTH - 4 essential cards only -->
-    <div class="section-title">🗓️ This Month (${new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'})})</div>
+    <div class="priv-block" data-priv>
+    <div class="section-title">🗓️ This Month (${new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'})}) ${(typeof PRIV !== 'undefined') ? PRIV.eyeBtn() : ''}</div>
+    <div class="priv-target">
     <div class="grid-stats" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
       <div class="stat-card">
         <div class="ic b1">💰</div>
@@ -276,13 +285,17 @@ function renderDashboard() {
         <div><div class="lbl">Orders</div><div class="val">${monthOrders.length}</div></div>
       </div>
     </div>
+    </div><!-- /priv-target -->
+    </div><!-- /priv-block (This Month) -->
 
     <!-- MONEY FLOW BY SOURCE (Cash / JazzCash / Easypaisa / Bank) -->
     ${(() => {
       if (typeof calculateAllBalances !== 'function') return '';
       const b = calculateAllBalances();
       return `
-        <div class="section-title">💰 Money Balance by Source <span style="font-size:12px;font-weight:500;color:var(--text-soft);">(all time • cash after expenses &amp; withdrawals)</span></div>
+        <div class="priv-block" data-priv>
+        <div class="section-title">💰 Money Balance by Source <span style="font-size:12px;font-weight:500;color:var(--text-soft);">(all time • cash after expenses &amp; withdrawals)</span>${(typeof PRIV !== 'undefined') ? PRIV.eyeBtn() : ''}</div>
+        <div class="priv-target">
         <div class="grid-stats" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:18px;">
           <div class="stat-card stat-clickable" onclick="app.go('drawings')" style="background:linear-gradient(135deg,#dcfce7,#f0fdf4);border-left:4px solid #22c55e;">
             <div class="ic" style="background:#22c55e;color:#fff;">💵</div>
@@ -331,6 +344,8 @@ function renderDashboard() {
             <div style="font-weight:700;color:#ea580c;font-size:13px;">View Drawings →</div>
           </div>
         ` : ''}
+        </div><!-- /priv-target -->
+        </div><!-- /priv-block (Money by source) -->
       `;
     })()}
 
@@ -401,4 +416,6 @@ function renderDashboard() {
 
   $('#app').innerHTML = renderLayout('dashboard', content);
   bindLayout();
+  /* Amounts privacy: default HIDDEN, 👁️ se reveal (60s baad dobara hide). */
+  if (typeof PRIV !== 'undefined') PRIV.refresh();
 }

@@ -39,6 +39,46 @@ function pdChargesOf(o) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/* ============================================================
+   PIECES PER UNIT  ("2pc Suit" = 2 pieces, "Kurta Shalwar" = 2)
+   ------------------------------------------------------------
+   Har product par `pcs` hota hai — us item ki 1 quantity me kitne
+   pieces hote hain. Invoice / Orders / WhatsApp / Inventory sab isi
+   se "total pieces" nikalte hain. Purane items par `pcs` nahi hota →
+   1 maan liya jata hai (is liye purana hisaab nahi badalta).
+   ============================================================ */
+function itemPcs(it) {
+  if (!it || typeof it !== 'object') return 1;
+  const raw = (it.pcs != null) ? it.pcs : it.pcsPerUnit;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/* Order ke kul pieces (qty × pcs per item) */
+function orderPcs(o) {
+  const items = (o && Array.isArray(o.items)) ? o.items : [];
+  return items.reduce((sum, it) => sum + (Number(it.qty) || 0) * itemPcs(it), 0);
+}
+
+/* "2pc Suit" / "3 Pc Suit" / "Kurta Shalwar (2pcs)" se pieces detect karein */
+function pcsFromName(name) {
+  const s = String(name || '');
+  const m = s.match(/(\d+)\s*(?:pc|pcs|piece|pieces)\b/i);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 1 && n <= 20) return n;
+  }
+  return 0;
+}
+
+/* Product ka pcs (product record se) */
+function productPcs(p) {
+  if (!p || typeof p !== 'object') return 1;
+  const n = Number(p.pcs);
+  if (Number.isFinite(n) && n > 0) return n;
+  return pcsFromName(p.name) || 1;
+}
+
 function fmtDate(iso) {
   if (!iso) return '-';
   const d = new Date(iso);

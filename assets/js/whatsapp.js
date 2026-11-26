@@ -65,7 +65,7 @@ function openWhatsAppStatusDialog(orderId, status) {
   const tpl = WA_STATUS_TEMPLATES[status] || WA_STATUS_TEMPLATES.ready;
 
   const invoiceNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  const totalPcs = (typeof orderPcs === 'function') ? orderPcs(o) : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
 
   const vars = {
     '{name}':     c.name || 'Customer',
@@ -216,7 +216,7 @@ function openWhatsAppPicker(orderId) {
   const c = DB.get('customers', o.customerId) || {};
   if (!c.phone) { toast('Customer has no phone number','warning'); return; }
   const invoiceNo = o.invoiceNo ? 'INV-' + o.invoiceNo : '#' + o.id.slice(-6).toUpperCase();
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  const totalPcs = (typeof orderPcs === 'function') ? orderPcs(o) : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
 
   // Build sent history
   const history = o.whatsappLog || [];

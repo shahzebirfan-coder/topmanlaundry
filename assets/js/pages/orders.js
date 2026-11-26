@@ -154,7 +154,7 @@ function renderOrdersBody() {
     return `<tr>
       <td><b>${escapeHtml(invNo)}</b>${o.isCredit?`<br><span class="badge due">CREDIT</span>`:''}${o.paymentType==='advance'?`<br><span class="badge" style="background:#dcfce7;color:#065f46;">🟢 ADVANCE</span>`:''}</td>
       <td><b>${escapeHtml(c.name)}</b><br><small style="color:var(--text-soft);">${escapeHtml(c.phone||'')}</small></td>
-      <td>${o.items.length} items<br><b style='color:var(--primary);'>${o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType==='hanger'?'Hanger':o.deliveryType==='fold'?'Fold':'Hanger / Fold'}</span>`:''}</td>
+      <td>${o.items.length} items<br><b style='color:var(--primary);'>${(typeof orderPcs==='function')?orderPcs(o):o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType==='hanger'?'Hanger':o.deliveryType==='fold'?'Fold':'Hanger / Fold'}</span>`:''}</td>
       <td><b>${fmtMoney(o.total)}</b></td>
       <td>${fmtMoney(o.paid)} ${o.due>0?`<br><span class="badge due">Due ${fmtMoney(o.due)}</span>`:`<br><span class="badge paid">Paid</span>`}</td>
       <td style="white-space:nowrap;">${payDateCell(o)}</td>
@@ -371,6 +371,7 @@ function openEditInvoice(orderId) {
       <td><input type="text" value="${escapeHtml(it.name)}" data-fld="name" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
       <td><input type="number" value="${it.price}" min="0" data-fld="price" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
       <td><input type="number" value="${it.qty}" min="1" data-fld="qty" style="width:70px;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
+      <td style="text-align:center;"><span class="badge" style="background:#dcfce7;color:#15803d;" title="Pieces per unit">${(typeof itemPcs==='function')?itemPcs(it):(it.pcs||1)}</span></td>
       <td class="line-total"><b>${fmtMoney(it.price*it.qty)}</b></td>
       <td><button class="btn btn-danger btn-sm" data-rm="${i}">🗑️</button></td>
     </tr>
@@ -386,7 +387,7 @@ function openEditInvoice(orderId) {
 
     <div style="font-weight:700;margin-bottom:8px;">Items</div>
     <table class="tbl" style="margin-bottom:12px;">
-      <thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Line Total</th><th></th></tr></thead>
+      <thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Pcs</th><th>Line Total</th><th></th></tr></thead>
       <tbody id="editItems">${itemsHtml(o.items)}</tbody>
     </table>
     <button class="btn btn-secondary btn-sm" id="addRowBtn">+ Add Item Row</button>
@@ -506,6 +507,7 @@ function openEditInvoice(orderId) {
         <td><input type="text" value="Custom Item" data-fld="name" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
         <td><input type="number" value="100" min="0" data-fld="price" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
         <td><input type="number" value="1" min="1" data-fld="qty" style="width:70px;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
+        <td style="text-align:center;"><span class="badge" style="background:#dcfce7;color:#15803d;">1</span></td>
         <td class="line-total"><b>${fmtMoney(100)}</b></td>
         <td><button class="btn btn-danger btn-sm" data-rm="${i}">🗑️</button></td>
       `;
@@ -525,7 +527,15 @@ function openEditInvoice(orderId) {
         const name = tr.querySelector('[data-fld="name"]').value.trim();
         const price = +tr.querySelector('[data-fld="price"]').value || 0;
         const qty = +tr.querySelector('[data-fld="qty"]').value || 0;
-        return { name, price, qty, lineTotal: price * qty, image: '🧺' };
+        /* pcs per unit preserve karein: pehle same naam ka item, warna product
+           rate-list, warna 1 (taake "2pc Suit" ka piece count na toote). */
+        const oldItem = (o.items || []).find(x => String(x.name).toLowerCase() === name.toLowerCase());
+        let pcs = oldItem ? (typeof itemPcs === 'function' ? itemPcs(oldItem) : (oldItem.pcs || 1)) : 0;
+        if (!pcs) {
+          const prod = DB.all('products').find(p => String(p.name).toLowerCase() === name.toLowerCase());
+          pcs = prod ? ((typeof productPcs === 'function') ? productPcs(prod) : (prod.pcs || 1)) : 1;
+        }
+        return { name, price, qty, pcs, lineTotal: price * qty, image: '🧺' };
       }).filter(i => i.name && i.price > 0 && i.qty > 0);
       if (!items.length) { toast('At least one item required','error'); return; }
 

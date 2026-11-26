@@ -127,13 +127,19 @@ function addToCart(productId) {
   if (!p) return;
   const existing = posState.cart.find(i => i.productId === productId);
   if (existing) existing.qty += 1;
-  else posState.cart.push({ productId: p.id, name: p.name, image: p.image, price: p.price, originalPrice: p.price, qty: 1 });
+  else posState.cart.push({
+    productId: p.id, name: p.name, image: p.image, price: p.price, originalPrice: p.price, qty: 1,
+    /* pieces per unit — "2pc Suit" = 2. Invoice/Inventory isi se count karte hain. */
+    pcs: (typeof productPcs === 'function') ? productPcs(p) : 1
+  });
   renderCart();
 }
 
 /* ===== Calculate cart totals (shared) ===== */
 function calcCartTotals() {
   const subtotal = posState.cart.reduce((s,i) => s + i.price * i.qty, 0);
+  /* total pieces = Σ qty × pcs-per-unit (2pc Suit × 2 = 4 pcs) */
+  const totalPcs = posState.cart.reduce((s,i) => s + i.qty * ((typeof itemPcs === 'function') ? itemPcs(i) : 1), 0);
   const settings = DB.settings();
   const taxPercent = settings.taxPercent || 0;
   const cust = DB.get('customers', posState.customerId);
@@ -166,7 +172,7 @@ function calcCartTotals() {
   const totalBeforeCharges = taxable + tax;
   const total = totalBeforeCharges + pickupDeliveryCharges;
 
-  return { subtotal, manualDiscount, loyaltyDiscount, loyaltyPercent, totalDiscount,
+  return { totalPcs, subtotal, manualDiscount, loyaltyDiscount, loyaltyPercent, totalDiscount,
            tax, taxPercent, pickupDeliveryCharges, totalBeforeCharges, total };
 }
 
@@ -237,7 +243,7 @@ function renderCart() {
         <div class="ci-price" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
           <span style="font-size:11px;color:var(--text-soft);">${cur}</span>
           <input type="number" class="ci-price-input" data-i="${i}" value="${it.price}" min="0" step="1" title="Click to change price" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--primary);background:var(--surface);text-align:right;"/>
-          <span style="font-size:11px;color:var(--text-soft);">× ${it.qty} =</span>
+          <span style="font-size:11px;color:var(--text-soft);">× ${it.qty}${(typeof itemPcs==='function' && itemPcs(it) > 1) ? ` <span title="${itemPcs(it)} pieces per unit" style="background:#dcfce7;color:#15803d;font-weight:700;padding:1px 5px;border-radius:5px;">${it.qty * itemPcs(it)} pcs</span>` : ''} =</span>
           <b>${fmtMoney(it.price*it.qty)}</b>
           ${priceChanged?`<button class="ci-reset" data-i="${i}" title="Reset to original price (${fmtMoney(origPrice)})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text-soft);text-decoration:underline;padding:0 2px;">↺ reset</button>`:''}
         </div>
@@ -286,7 +292,12 @@ function renderCart() {
 
   const tot = calcCartTotals();
 
+  const cartPieces = posState.cart.reduce((s,i) => s + i.qty * ((typeof itemPcs === 'function') ? itemPcs(i) : 1), 0);
   $('#cartSummary').innerHTML = `
+    <div class="row" id="pcsRow" style="display:${cartPieces > 0 ? 'flex' : 'none'};" title="Pieces per unit se count hota hai (2pc Suit = 2)">
+      <span>🧺 ${t('pos.totalPcs')}</span>
+      <span id="pcsVal" style="font-weight:700;color:#15803d;">${cartPieces} pcs</span>
+    </div>
     <div class="row"><span>Subtotal</span><span>${fmtMoney(tot.subtotal)}</span></div>
 
     <div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:8px;margin:6px 0;">
@@ -987,7 +998,7 @@ function openQuickAdd() {
       const name = $('#qName', m).value.trim();
       const price = +$('#qPrice', m).value;
       if (!name || price <= 0) { toast('Enter name & price','error'); return; }
-      posState.cart.push({ productId: 'custom_'+Date.now(), name, image:'🧺', price, qty:1 });
+      posState.cart.push({ productId: 'custom_'+Date.now(), name, image:'🧺', price, qty:1, pcs:1 });
       closeModal(); renderCart();
     };
   }});

@@ -104,8 +104,9 @@ function renderReportBody() {
   // Top products (using productImageHTML for proper rendering!)
   const itemMap = {};
   orders.forEach(o => (o.items||[]).forEach(it => {
-    if (!itemMap[it.name]) itemMap[it.name] = { name: it.name, qty: 0, total: 0, image: it.image, productId: it.productId };
+    if (!itemMap[it.name]) itemMap[it.name] = { name: it.name, qty: 0, pcs: 0, total: 0, image: it.image, productId: it.productId };
     itemMap[it.name].qty += it.qty;
+    itemMap[it.name].pcs += it.qty * ((typeof itemPcs === 'function') ? itemPcs(it) : (it.pcs || 1));
     itemMap[it.name].total += it.qty * it.price;
   }));
   const top = Object.values(itemMap).sort((a,b)=>b.qty-a.qty).slice(0,10);
@@ -159,7 +160,7 @@ function renderReportBody() {
                 </div>
               </td>
               <td><b>${escapeHtml(t.name)}</b></td>
-              <td>${t.qty}</td>
+              <td>${t.qty}${t.pcs && t.pcs !== t.qty ? `<br><small style="color:#15803d;font-weight:700;">${t.pcs} pcs</small>` : ''}</td>
               <td style="text-align:right;"><b>${fmtMoney(t.total)}</b></td>
             </tr>`).join('') : `<tr><td colspan="4" class="empty">No data</td></tr>`}
           </tbody>
@@ -193,7 +194,7 @@ function exportReportCSV() {
     rows.push([
       o.invoiceNo ? 'INV-'+o.invoiceNo : o.id,
       o.createdAt, c.name,
-      (o.items||[]).map(i => `${i.qty}x ${i.name}`).join(' | '),
+      (o.items||[]).map(i => { const pc=(typeof itemPcs==='function')?itemPcs(i):(i.pcs||1); return `${i.qty}x ${i.name}${pc>1?' ('+(i.qty*pc)+' pcs)':''}`; }).join(' | '),
       o.subtotal, o.discount, o.tax,
       (typeof pdChargesOf==='function'?pdChargesOf(o):(Number(o.pickupDeliveryCharges)||0)),
       o.total, o.paid, o.due, o.status, o.paymentMethod||'',
@@ -223,8 +224,9 @@ async function exportReportPDF() {
   // Top items
   const itemMap = {};
   orders.forEach(o => (o.items||[]).forEach(it => {
-    if (!itemMap[it.name]) itemMap[it.name] = { name: it.name, qty: 0, total: 0 };
+    if (!itemMap[it.name]) itemMap[it.name] = { name: it.name, qty: 0, pcs: 0, total: 0 };
     itemMap[it.name].qty += it.qty;
+    itemMap[it.name].pcs += it.qty * ((typeof itemPcs === 'function') ? itemPcs(it) : (it.pcs || 1));
     itemMap[it.name].total += it.qty * it.price;
   }));
   const top = Object.values(itemMap).sort((a,b)=>b.qty-a.qty).slice(0,15);
@@ -242,7 +244,7 @@ async function exportReportPDF() {
 
   const topRows = top.map(t => `<tr>
     <td style="padding:6px 10px;border-bottom:1px solid #eee;"><b>${escapeHtml(t.name)}</b></td>
-    <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${t.qty}</td>
+    <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${t.qty}${t.pcs && t.pcs !== t.qty ? ' <small style="color:#15803d;">(' + t.pcs + ' pcs)</small>' : ''}</td>
     <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${fmtMoney(t.total)}</td>
   </tr>`).join('') || '<tr><td colspan="3" style="padding:10px;text-align:center;color:#999;">No sales data</td></tr>';
 

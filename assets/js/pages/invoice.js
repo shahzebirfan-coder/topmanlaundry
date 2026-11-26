@@ -6,7 +6,8 @@ function openInvoice(orderId, autoPrint) {
   const cashier = DB.get('users', o.cashierId) || { name:'-' };
   const s = DB.settings();
   const invoiceNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  /* Pieces per unit: 2pc Suit × 2 = 4 pcs (purane items par pcs=1) */
+  const totalPcs = (typeof orderPcs === 'function') ? orderPcs(o) : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
   const delTypeMap = {
     hanger: { icon: '🧥', label: 'HANGER' },
     fold:   { icon: '📦', label: 'FOLD' },
@@ -27,6 +28,7 @@ function openInvoice(orderId, autoPrint) {
         <button class="btn btn-secondary btn-sm" id="photosBtn" title="Manage order photos (for disputes)">📷 Photos${(o.photos&&o.photos.length)?` (${o.photos.length})`:''}</button>
         ${c.phone ? `<button class="btn btn-success btn-sm" id="waBtn" title="Send invoice via WhatsApp">📱 WhatsApp</button>` : ''}
         ${DB.currentUser().role==='admin' ? `<button class="btn btn-secondary btn-sm" id="customizeInv">⚙️ Customize</button><button class="btn btn-warning btn-sm" id="editFromInv">✏️ Edit</button>`:''}
+        <button class="btn btn-secondary btn-sm" id="pdfBtn" title="Colour PDF invoice download karein (WhatsApp ke liye)">📄 PDF</button>
         <button class="btn btn-secondary btn-sm" id="printCustomerOnly" title="Print only customer copy">🖨️ Customer Only</button>
         <button class="btn btn-primary btn-sm" id="printBoth" title="Print customer + office copy together">🖨️🖨️ Print Both</button>
         <button class="btn btn-ghost btn-sm" onclick="closeModal()">Close</button>
@@ -63,6 +65,8 @@ function openInvoice(orderId, autoPrint) {
     if (photosBtn) photosBtn.onclick = () => { closeModal(); openOrderPhotos(o.id); };
     const waBtn = $('#waBtn', m);
     if (waBtn) waBtn.onclick = () => sendWhatsAppInvoice(o, c, s, invoiceNo, totalPcs, delTypeInfo);
+    const pdfBtn = $('#pdfBtn', m);
+    if (pdfBtn) pdfBtn.onclick = () => downloadInvoicePDF(o, c, s);
     $('#printCustomerOnly', m).onclick = () => doPrint(false);
     $('#printBoth', m).onclick = () => doPrint(dualCopy);
     if (autoPrint) setTimeout(() => doPrint(dualCopy), 300);
@@ -172,7 +176,9 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
 
   const itemsHtml = (o.items || []).map(it => `
     <tr>
-      <td style="padding:6px 0;font-size:${fontSize+1}px;font-weight:bold;">${escapeHtml(it.name)}<br><span style="font-size:${fontSize-1}px;font-weight:normal;">${it.qty} × ${fmtMoney(it.price)}</span></td>
+      <td style="padding:6px 0;font-size:${fontSize+1}px;font-weight:bold;">${escapeHtml(it.name)}<br><span style="font-size:${fontSize-1}px;font-weight:normal;">${it.qty} × ${fmtMoney(it.price)}${
+        ((typeof itemPcs==='function')?itemPcs(it):(it.pcs||1)) > 1
+          ? ` &nbsp;=&nbsp; <b>${it.qty * itemPcs(it)} pcs</b>` : ''}</span></td>
       <td style="text-align:right;padding:6px 0;font-size:${fontSize+1}px;font-weight:bold;">${fmtMoney(it.qty*it.price)}</td>
     </tr>
   `).join('');
@@ -312,7 +318,10 @@ function buildOfficeSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       <div style="border:2px solid #000; border-radius:6px; padding:10px; background:#fff;">
         <table style="font-size:${fontSize+2}px;width:100%;border-collapse:collapse;line-height:1.5;">
           ${(o.items || []).map(it => `
-            <tr><td style="padding:6px 0;font-weight:bold;">${escapeHtml(it.name)} <span style="font-size:${fontSize+4}px;float:right;">×${it.qty}</span></td></tr>
+            <tr><td style="padding:6px 0;font-weight:bold;">${escapeHtml(it.name)}${
+              ((typeof itemPcs==='function')?itemPcs(it):(it.pcs||1)) > 1
+                ? `<span style="font-size:${fontSize}px;font-weight:600;color:#000;"> (${(typeof itemPcs==='function')?itemPcs(it):it.pcs} pcs/unit)</span>` : ''
+            } <span style="font-size:${fontSize+4}px;float:right;">×${it.qty}${((typeof itemPcs==='function')?itemPcs(it):(it.pcs||1)) > 1 ? ' = ' + (it.qty * itemPcs(it)) + ' pcs' : ''}</span></td></tr>
           `).join('')}
         </table>
         <div style="border-top:2px solid #000; margin-top:8px; padding-top:8px;">
@@ -344,7 +353,10 @@ function sendWhatsAppInvoice(o, c, s, invoiceNo, totalPcs, delTypeInfo) {
   if (phone.startsWith('0') && phone.length === 11) phone = '92' + phone.substring(1);
 
   const itemsText = (o.items || [])
-    .map(it => `• ${it.name} × ${it.qty} = ${fmtMoney(it.qty * it.price)}`)
+    .map(it => {
+      const pc = (typeof itemPcs === 'function') ? itemPcs(it) : (it.pcs || 1);
+      return `• ${it.name} × ${it.qty}${pc > 1 ? ` (${it.qty * pc} pcs)` : ''} = ${fmtMoney(it.qty * it.price)}`;
+    })
     .join('\n');
 
   const template = s.whatsappTemplate || `Hello {name}, thank you for your order at {shop}!
@@ -388,13 +400,19 @@ Delivery: {delivery} ({type})
       <label>Message Preview (you can edit before sending)</label>
       <textarea id="waMsg" rows="14" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;">${escapeHtml(msg)}</textarea>
     </div>
+    <div style="background:#ecfdf5;border:1px solid #a7f3d0;padding:10px 12px;border-radius:8px;font-size:12px;color:#065f46;margin-bottom:10px;line-height:1.5;">
+      📄 <b>Colour PDF invoice (recommended):</b> <b>Send PDF + WhatsApp</b> dabayein —
+      phone par WhatsApp share sheet khulega, WhatsApp chunein aur PDF caption ke saath customer ko chali jayegi.
+      PC par PDF download ho kar WhatsApp khul jayega — wahaan 📎 (attach) se PDF select kar dein.
+    </div>
     <div style="background:var(--surface-alt);padding:10px;border-radius:8px;font-size:12px;color:var(--text-soft);margin-bottom:14px;">
-      💡 Clicking <b>Send</b> opens WhatsApp Web (on PC) or the WhatsApp app (on phone) with this message pre-filled. You just need to press the send arrow there.
+      💡 <b>Text only</b> dabane par sirf yeh message pre-filled khulega (PDF attach nahi hoti).
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-secondary" id="copyBtn">📋 Copy Text</button>
-      <button class="btn btn-success" id="sendBtn">📱 Open WhatsApp</button>
+      <button class="btn btn-secondary" id="sendBtn">📱 Text Only</button>
+      <button class="btn btn-success" id="sendPdfBtn">📄 Send PDF + WhatsApp</button>
     </div>
   `, { large: true, onOpen(m) {
     $('#copyBtn', m).onclick = () => {
@@ -408,7 +426,59 @@ Delivery: {delivery} ({type})
       toast('Opening WhatsApp...', 'success');
       closeModal();
     };
+    const pdfSend = $('#sendPdfBtn', m);
+    if (pdfSend) pdfSend.onclick = () => {
+      const text = $('#waMsg', m).value;
+      closeModal();
+      shareInvoicePDF(o, c, s, phone, text);
+    };
   }});
+}
+
+/* ============================================================
+   PDF INVOICE (colour copy for the customer)
+   ------------------------------------------------------------
+   • Phone: Web Share API se PDF seedha WhatsApp mein attach
+   • PC   : PDF download + wa.me message (phir 📎 se attach)
+   ============================================================ */
+function pdfModuleReady() {
+  return (typeof InvoicePDF !== 'undefined' && InvoicePDF && typeof InvoicePDF.build === 'function');
+}
+
+function downloadInvoicePDF(o, c, s) {
+  if (!pdfModuleReady()) { toast('PDF module load nahi hua — page refresh (Ctrl+F5) karein', 'error'); return; }
+  try {
+    const name = InvoicePDF.download(o, c, s);
+    toast('PDF download: ' + name, 'success');
+  } catch (e) {
+    console.error(e);
+    toast('PDF banane mein masla hua', 'error');
+  }
+}
+
+function shareInvoicePDF(o, c, s, phone, text) {
+  if (!pdfModuleReady()) { toast('PDF module load nahi hua — page refresh (Ctrl+F5) karein', 'error'); return; }
+
+  const openWhatsAppWithFile = (claimAttached) => {
+    let name = '';
+    try { name = InvoicePDF.download(o, c, s); } catch (e) { console.error(e); }
+    const line = claimAttached
+      ? '\n\n📄 Colour invoice PDF bhi saath bheji gayi hai.'
+      : '\n\n📄 Colour invoice PDF alag file mein bheji ja rahi hai — file: ' + name;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text + line)}`, '_blank');
+    toast('PDF save ho gaya (' + name + ') — WhatsApp chat mein 📎 se PDF attach kar ke bhej dein', 'success');
+  };
+
+  if (InvoicePDF.canShareFiles()) {
+    InvoicePDF.share(o, c, s, text)
+      .then(ok => {
+        if (ok) toast('PDF ke saath WhatsApp share ho gaya ✅', 'success');
+        else openWhatsAppWithFile(false);   /* user ne share cancel kiya / fail */
+      })
+      .catch(() => openWhatsAppWithFile(false));
+  } else {
+    openWhatsAppWithFile(false);
+  }
 }
 
 /* ============================================================
@@ -651,7 +721,7 @@ function printChallan(orderId) {
   const c = DB.get('customers', o.customerId) || { name: 'Customer' };
   const s = DB.settings();
   const challanNo = o.invoiceNo ? `CH-${o.invoiceNo}` : 'CH-' + o.id.slice(-6).toUpperCase();
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  const totalPcs = (typeof orderPcs === 'function') ? orderPcs(o) : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
   
   const width = Math.max(280, Math.min(400, +s.invoiceWidth || 300));
   const fontSize = Math.max(12, Math.min(20, (+s.invoiceFontSize || 13)));
@@ -675,6 +745,7 @@ function printChallan(orderId) {
           <tr>
             <th style="text-align:left; padding:6px 0; border-bottom:1px dashed #000;">Item Description</th>
             <th style="text-align:right; padding:6px 0; border-bottom:1px dashed #000;">Qty</th>
+            <th style="text-align:right; padding:6px 0; border-bottom:1px dashed #000;">Pcs</th>
           </tr>
         </thead>
         <tbody>
@@ -682,6 +753,7 @@ function printChallan(orderId) {
             <tr>
               <td style="padding:6px 0; font-weight:bold;">${escapeHtml(it.name)}</td>
               <td style="text-align:right; font-weight:bold; font-size:${fontSize+2}px;">${it.qty}</td>
+              <td style="text-align:right; font-weight:bold; font-size:${fontSize+2}px;">${it.qty * ((typeof itemPcs==='function')?itemPcs(it):(it.pcs||1))}</td>
             </tr>
           `).join('')}
         </tbody>

@@ -105,6 +105,21 @@ const DB = {
         this.save();
       }
 
+      /* PIECES PER UNIT — products "2pc Suit" / "3pc Suit" jaise naam se detect
+         ho kar pcs set ho jata hai (sirf jahan pcs mojood na ho). */
+      if (Array.isArray(this._data.products)) {
+        let touched = false;
+        this._data.products.forEach(p => {
+          if (!p || typeof p !== 'object') return;
+          if (p.pcs == null || !(Number(p.pcs) > 0)) {
+            const detected = (typeof pcsFromName === 'function') ? pcsFromName(p.name) : 0;
+            p.pcs = detected || 1;
+            touched = true;
+          }
+        });
+        if (touched) this.save();
+      }
+
       // Thermal printer defaults — applied once, never overrides a client's own choice.
       // This makes an existing install plug & play with a receipt printer too.
       const st = this._data.settings;

@@ -237,7 +237,7 @@ function downloadInvoicePDF(orderId) {
   const c = DB.get('customers', o.customerId) || {};
   const s = DB.settings();
   const invNo = o.invoiceNo ? 'INV-' + o.invoiceNo : '#' + o.id.slice(-6).toUpperCase();
-  const totalPcs = (o.items||[]).reduce((sum,i)=>sum+(i.qty||0),0);
+  const totalPcs = (typeof orderPcs === 'function') ? orderPcs(o) : (o.items||[]).reduce((sum,i)=>sum+(i.qty||0),0);
 
   // Build print-friendly HTML in a new window
   const w = window.open('', '_blank', 'width=800,height=900');

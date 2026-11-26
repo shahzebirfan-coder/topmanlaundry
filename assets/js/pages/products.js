@@ -22,10 +22,11 @@ function renderProducts() {
           </div>
         </div>
         <div style="padding:8px 16px;font-size:12px;color:var(--text-soft);border-bottom:1px solid var(--border);background:var(--surface-alt);">
-          💡 Tip: Click any price below to edit it instantly. Press Enter to save.
+          💡 Tip: Click any price (or <b>Pcs / Unit</b>) below to edit instantly. Press Enter to save.
+          <br><small style="color:var(--text-soft);">🧺 <b>Pcs / Unit</b> = 1 quantity me kitne pieces? (2pc Suit = 2, Kurta Shalwar = 2, Shirt = 1) — invoice par total pieces isi se bante hain aur Hangers/Shoppers bhi isi hisaab se minus hote hain.</small>
         </div>
         <table class="tbl">
-          <thead><tr><th></th><th>Name</th><th>Category</th><th style="width:140px;">Price</th><th style="width:140px;">Max (range)</th><th>Status</th><th style="width:160px;">Actions</th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th>Category</th><th style="width:130px;">Price</th><th style="width:120px;" title="1 quantity me kitne pieces hote hain — jaise 2pc Suit = 2">🧺 Pcs / Unit</th><th style="width:120px;">Max (range)</th><th>Status</th><th style="width:160px;">Actions</th></tr></thead>
           <tbody id="prodBody"></tbody>
         </table>
       </div>
@@ -73,7 +74,7 @@ function renderProductsBody() {
   if (q) products = products.filter(p => p.name.toLowerCase().includes(q));
 
   if (!products.length) {
-    $('#prodBody').innerHTML = `<tr><td colspan="7"><div class="empty"><div class="emoji">🧺</div><h4>No products</h4></div></td></tr>`;
+    $('#prodBody').innerHTML = `<tr><td colspan="8"><div class="empty"><div class="emoji">🧺</div><h4>No products</h4></div></td></tr>`;
     return;
   }
   $('#prodBody').innerHTML = products.map(p => {
@@ -83,6 +84,7 @@ function renderProductsBody() {
       <td><b>${escapeHtml(p.name)}</b></td>
       <td>${cat.icon} ${escapeHtml(cat.name)}</td>
       <td><input class="rate-edit" data-fld="price" type="number" value="${p.price}" min="0" style="width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--primary);background:var(--surface);"/></td>
+      <td><input class="rate-edit" data-fld="pcs" type="number" value="${(typeof productPcs==='function'?productPcs(p):(p.pcs||1))}" min="1" max="20" step="1" title="1 quantity = kitne pieces" style="width:80px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-weight:700;text-align:center;background:#f0fdf4;color:#15803d;"/></td>
       <td><input class="rate-edit" data-fld="priceMax" type="number" value="${p.priceMax||''}" min="0" placeholder="—" style="width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);"/></td>
       <td>${p.active===false ? '<span class="badge cancelled">Hidden</span>' : '<span class="badge paid">Active</span>'}</td>
       <td>
@@ -99,10 +101,18 @@ function renderProductsBody() {
       const tr = inp.closest('tr');
       const id = tr.dataset.id;
       const fld = inp.dataset.fld;
-      let val = inp.value === '' ? null : Math.max(0, parseFloat(inp.value) || 0);
+      let val;
+      if (fld === 'pcs') {
+        /* pieces per unit — kam az kam 1, zyada se zyada 20 */
+        val = Math.min(20, Math.max(1, Math.round(parseFloat(inp.value) || 1)));
+        inp.value = val;
+      } else {
+        val = inp.value === '' ? null : Math.max(0, parseFloat(inp.value) || 0);
+      }
       const patch = {};
       patch[fld] = val;
       DB.update('products', id, patch);
+      if (fld === 'pcs') toast(`🧺 Pcs / Unit = ${val} saved`, 'success');
       inp.style.boxShadow = '0 0 0 3px rgba(34,197,94,.3)';
       setTimeout(()=>inp.style.boxShadow='', 600);
     };
@@ -162,6 +172,11 @@ function openProductForm(existing) {
     </div>
     <div class="form-row">
       <div class="field"><label>Price (Rs.) *</label><input type="number" id="pPrice" value="${p.price}"/></div>
+      <div class="field">
+        <label>🧺 Pieces per Unit *</label>
+        <input type="number" id="pPcs" value="${(typeof productPcs==='function'?productPcs(p):(p.pcs||1))}" min="1" max="20" step="1" style="font-weight:700;"/>
+        <small style="color:var(--text-soft);">1 quantity me kitne pieces? (2pc Suit = <b>2</b>, Kurta Shalwar = <b>2</b>, Shirt = <b>1</b>)</small>
+      </div>
       <div class="field"><label>Max Price (for ranges, optional)</label><input type="number" id="pPriceMax" value="${p.priceMax||''}" placeholder="e.g. 1000 for 800-1000"/></div>
     </div>
     <div class="form-row cols-1">
@@ -198,14 +213,28 @@ function openProductForm(existing) {
       } catch (err) { toast('Upload failed: ' + err.message, 'error'); }
     };
 
+    /* Name me "2pc" / "3 pc" likha ho to Pcs field khud set kar dein
+       (user ka manually likha hua number overwrite nahi hota). */
+    const pcsInput = $('#pPcs', m);
+    const nameInput = $('#pName', m);
+    let pcsTouched = false;
+    if (pcsInput) pcsInput.oninput = () => { pcsTouched = true; };
+    if (nameInput) nameInput.oninput = () => {
+      if (pcsTouched) return;
+      const detected = (typeof pcsFromName === 'function') ? pcsFromName(nameInput.value) : 0;
+      if (detected > 1) pcsInput.value = detected;
+    };
+
     $('#cancelBtn', m).onclick = closeModal;
     $('#saveBtn', m).onclick = () => {
       const name = $('#pName', m).value.trim();
       const price = +$('#pPrice', m).value;
       if (!name || price < 0) { toast('Enter name & price','error'); return; }
       const maxV = $('#pPriceMax', m).value;
+      const pcsVal = Math.min(20, Math.max(1, Math.round(+($('#pPcs', m).value) || 1)));
       const data = {
         name, price,
+        pcs: pcsVal,
         priceMax: maxV === '' ? null : Math.max(0, +maxV || 0),
         category: $('#pCat', m).value,
         image: $('#pImg', m).value || '🧺',
@@ -213,7 +242,7 @@ function openProductForm(existing) {
       };
       if (existing) DB.update('products', existing.id, data);
       else DB.insert('products', data);
-      closeModal(); toast('Saved','success'); renderProductsBody();
+      closeModal(); toast(`Saved — ${pcsVal} pcs per unit`,'success'); renderProductsBody();
     };
   }});
 }

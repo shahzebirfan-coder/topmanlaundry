@@ -6,7 +6,11 @@
 
 /* Calculate how much of each supply an order uses */
 function calculateSupplyUsage(order) {
-  const totalPcs = (order.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  /* PIECES based: har piece par 1 hanger + 1 shopper.
+     "2pc Suit" × 2 = 4 pcs → 4 hangers + 4 shoppers.
+     (purane items par pcs=1 hota hai, is liye purana hisaab same rehta hai) */
+  const totalPcs = (order.items || []).reduce((sum, it) =>
+    sum + (Number(it.qty) || 0) * ((typeof itemPcs === 'function') ? itemPcs(it) : (Number(it.pcs) > 0 ? Number(it.pcs) : 1)), 0);
   const delType = (order.deliveryType || 'hanger').toLowerCase();
   const usesHangers = delType === 'hanger' || delType === 'both';
 

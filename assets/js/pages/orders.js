@@ -1,9 +1,29 @@
 /* ===================== ORDERS / INVOICES ===================== */
 let ordersFilter = { status:'all', search:'', dateFrom:'', dateTo:'', payment:'all' };
 
+/* ------------------------------------------------------------
+   AMOUNT PRIVACY on Orders page
+   Total / Collected / Due amounts default par BLUR rehte hain.
+   Page header ke 🔒 / 👁️ button (PRIV.masterBtn) se show/hide.
+   Values bilkul wahi rehti hain — sirf dikhawa chhupta hai.
+   ------------------------------------------------------------ */
+function pcCard(html) {
+  /* stat card ka amount (chhota chip) */
+  if (typeof PRIV === 'undefined') return html;
+  return `<span class="priv-block priv-compact" data-priv><span class="priv-target">${html}</span></span>`;
+}
+function pq(html) {
+  /* table row ka amount — sirf blur, koi chip nahi */
+  if (typeof PRIV === 'undefined') return html;
+  return `<span class="priv-block priv-quiet" data-priv><span class="priv-target">${html}</span></span>`;
+}
+
 function renderOrders() {
   const content = `
-    <h1 class="page-title">📦 ${t('ord.title')}</h1>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h1 class="page-title" style="margin:0;">📦 ${t('ord.title')}</h1>
+      ${(typeof PRIV !== 'undefined') ? PRIV.masterBtn() : ''}
+    </div>
     <p class="page-sub">Search, view, and ${DB.currentUser().role==='admin'?'edit':'track'} all invoices.</p>
 
     <div class="card" style="margin-bottom:14px;padding:14px;">
@@ -137,14 +157,17 @@ function renderOrdersBody() {
   $('#ordersSummary').innerHTML = `
     <div class="grid-stats" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:14px;">
       <div class="stat-card"><div class="ic b1">🧾</div><div><div class="lbl">Showing</div><div class="val">${filtered.length} invoices</div></div></div>
-      <div class="stat-card"><div class="ic b2">💰</div><div><div class="lbl">${t('ord.total')}</div><div class="val">${fmtMoney(totalRevenue)}</div></div></div>
-      <div class="stat-card"><div class="ic b3">✅</div><div><div class="lbl">${t('ord.collected')}</div><div class="val">${fmtMoney(totalPaid)}</div></div></div>
-      <div class="stat-card"><div class="ic b4">⏰</div><div><div class="lbl">${t('ord.outstandingDue')}</div><div class="val" style="color:var(--danger);">${fmtMoney(totalDue)}</div></div></div>
+      <div class="stat-card"><div class="ic b2">💰</div><div><div class="lbl">${t('ord.total')}</div><div class="val">${pcCard(fmtMoney(totalRevenue))}</div></div></div>
+      <div class="stat-card"><div class="ic b3">✅</div><div><div class="lbl">${t('ord.collected')}</div><div class="val">${pcCard(fmtMoney(totalPaid))}</div></div></div>
+      <div class="stat-card"><div class="ic b4">⏰</div><div><div class="lbl">${t('ord.outstandingDue')}</div><div class="val" style="color:var(--danger);">${pcCard(fmtMoney(totalDue))}</div></div></div>
     </div>
   `;
+  /* amounts ko privacy-blur par lagao (default: hidden) */
+  if (typeof PRIV !== 'undefined') PRIV.refresh();
 
   if (!filtered.length) {
     $('#ordersBody').innerHTML = `<tr><td colspan="11"><div class="empty"><div class="emoji">📦</div><h4>${t('ord.noOrders')}</h4><p>${t('ord.tryClearing')}</p></div></td></tr>`;
+    if (typeof PRIV !== 'undefined') PRIV.refresh();
     return;
   }
 
@@ -155,8 +178,8 @@ function renderOrdersBody() {
       <td><b>${escapeHtml(invNo)}</b>${o.isCredit?`<br><span class="badge due">CREDIT</span>`:''}${o.paymentType==='advance'?`<br><span class="badge" style="background:#dcfce7;color:#065f46;">🟢 ADVANCE</span>`:''}</td>
       <td><b>${escapeHtml(c.name)}</b><br><small style="color:var(--text-soft);">${escapeHtml(c.phone||'')}</small></td>
       <td>${o.items.length} items<br><b style='color:var(--primary);'>${(typeof orderPcs==='function')?orderPcs(o):o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType==='hanger'?'Hanger':o.deliveryType==='fold'?'Fold':'Hanger / Fold'}</span>`:''}</td>
-      <td><b>${fmtMoney(o.total)}</b></td>
-      <td>${fmtMoney(o.paid)} ${o.due>0?`<br><span class="badge due">Due ${fmtMoney(o.due)}</span>`:`<br><span class="badge paid">Paid</span>`}</td>
+      <td><b>${pq(fmtMoney(o.total))}</b></td>
+      <td>${pq(fmtMoney(o.paid))} ${o.due>0?`<br><span class="badge due">Due ${pq(fmtMoney(o.due))}</span>`:`<br><span class="badge paid">Paid</span>`}</td>
       <td style="white-space:nowrap;">${payDateCell(o)}</td>
       <td>
         <span class="badge ${o.status}">${o.status}</span>
@@ -178,6 +201,8 @@ function renderOrdersBody() {
       </td>
     </tr>`;
   }).join('');
+
+  if (typeof PRIV !== 'undefined') PRIV.refresh();
 
   $$('[data-act]').forEach(b => b.onclick = () => {
     const id = b.dataset.id;

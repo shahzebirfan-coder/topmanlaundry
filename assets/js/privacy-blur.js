@@ -54,6 +54,19 @@ window.PRIV = (function () {
       }
       .priv-block.is-hidden .priv-target * { user-select: none !important; }
 
+      /* Chhote spots (stat cards, table cells) — poora chip jagah nahi leta */
+      .priv-block.priv-compact { display: inline-block; }
+      .priv-block.priv-compact.is-hidden::after {
+        content: '🔒 👁️';
+        font-size: 11.5px;
+        padding: 4px 9px;
+        letter-spacing: 0;
+      }
+      /* Table rows: chip nahi, sirf blur (warna har row par shor ho jata hai) */
+      .priv-block.priv-quiet.is-hidden::after { display: none !important; }
+      .priv-block.priv-compact.is-hidden .priv-target,
+      .priv-block.priv-quiet.is-hidden .priv-target { filter: blur(7px); opacity: .6; }
+
       /* "amounts hidden" chip — blurred values ke ooper.
          NOTE: chip .priv-block par lagta hai (blurred target par nahi),
          warna blur filter khud chip ko bhi dhundla kar deta. */

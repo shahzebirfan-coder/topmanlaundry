@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mr-laundry-pos-v45';
+const CACHE_NAME = 'mr-laundry-pos-v46';
 const urlsToCache = [
   './',
   './index.html',
